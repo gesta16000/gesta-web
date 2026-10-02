@@ -21,7 +21,6 @@ const initialBudgets: Record<BudgetKey, BudgetData> = {
   principale_fonct: { montant_ht: '', montant_ttc: '', editing: null },
   principale_invest: { montant_ht: '', montant_ttc: '', editing: null },
   annexe_fonct: { montant_ht: '', montant_ttc: '', editing: null },
-  annexe_invest: { montant_ttc: '', montant_ht: '', editing: null },
   annexe_invest: { montant_ht: '', montant_ttc: '', editing: null },
 };
 

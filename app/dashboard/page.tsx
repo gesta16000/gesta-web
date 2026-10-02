@@ -204,7 +204,8 @@ export default function DashboardPage() {
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(value: number) => formatEuro(value)} contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(100, 116, 139, 0.3)', borderRadius: '8px', color: '#fff', fontWeight: 'bold' }} />
+                           // CODE CORRIGÉ :
+                        <Tooltip formatter={(value: any) => [`${Number(value).toLocaleString('fr-FR')} €`, '']} />
                         <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" wrapperStyle={{ color: '#cbd5e1', fontWeight: '600' }} />
                       </PieChart>
                     </ResponsiveContainer>
