@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/rapport-quotidien",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
