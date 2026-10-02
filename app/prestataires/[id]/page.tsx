@@ -246,8 +246,15 @@ export default function PrestataireDetailPage() {
     setActiveModal('intervention');
   };
 
-  const handleDeleteIntervention = async (id: string) => {
-    if(confirm('Supprimer cette intervention ?')) { await supabase.from('interventions').delete().eq('id', id); fetchData(); }
+    const handleDeleteIntervention = async (id: string) => {
+    if(confirm('Supprimer cette intervention ?')) { 
+      const { error } = await supabase.from('interventions').delete().eq('id', id);
+      if (error) {
+        alert('Erreur lors de la suppression : ' + error.message);
+      } else {
+        fetchData();
+      }
+    }
   };
 
   const getMarcheStatus = (dateFin: string) => {
