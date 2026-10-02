@@ -127,7 +127,6 @@ export default function PrestataireDetailPage() {
     finally { setUploading(false); }
   };
 
-  // --- NOUVELLE FONCTION : SUPPRESSION DU PRESTATAIRE ---
   const handleDeletePrestataire = async () => {
     if (!confirm("⚠️ Êtes-vous sûr de vouloir supprimer ce prestataire ?\n\nCette action est irréversible et supprimera également ses contacts, marchés et interventions associés.")) {
       return;
@@ -136,7 +135,7 @@ export default function PrestataireDetailPage() {
     try {
       const { error } = await supabase.from('prestataires').delete().eq('id', prestataireId);
       if (error) throw error;
-      router.push('/prestataires'); // Redirection vers la liste après suppression
+      router.push('/prestataires');
     } catch (error: any) {
       alert('Erreur lors de la suppression : ' + error.message);
       setUploading(false);
@@ -246,7 +245,7 @@ export default function PrestataireDetailPage() {
     setActiveModal('intervention');
   };
 
-    const handleDeleteIntervention = async (id: string) => {
+  const handleDeleteIntervention = async (id: string) => {
     if(confirm('Supprimer cette intervention ?')) { 
       const { error } = await supabase.from('interventions').delete().eq('id', id);
       if (error) {
@@ -287,7 +286,6 @@ export default function PrestataireDetailPage() {
               </div>
             </div>
             
-            {/* BOUTONS D'ACTION PRESTATAIRE (MODIFIER + SUPPRIMER) */}
             <div className="flex items-center gap-3">
               <button 
                 onClick={handleDeletePrestataire} 
@@ -450,7 +448,24 @@ export default function PrestataireDetailPage() {
                             </div>
                           ) : <span className="text-sm text-slate-400 italic">Aucun</span>}
                         </td>
-                        <td className="px-6 py-4"><div className="flex items-center justify-center gap-2"><button onClick={() => openEditIntervention(int)} className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" title="Modifier"><Edit3 className="w-5 h-5" /></button><button onClick={() => handleDeleteIntervention(int.id)} className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Supprimer"><Trash2 className="w-5 h-5" /></button></div></td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button 
+                              onClick={() => openEditIntervention(int)}
+                              className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" 
+                              title="Modifier"
+                            >
+                              <Edit3 className="w-5 h-5" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteIntervention(int.id)}
+                              className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" 
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
