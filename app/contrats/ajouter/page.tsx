@@ -6,6 +6,7 @@ import { supabase } from '../../../lib/supabase';
 import Sidebar from '../../../components/Sidebar';
 import { ArrowLeft, Save } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
 export default function AjouterContratPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
