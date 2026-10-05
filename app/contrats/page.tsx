@@ -156,7 +156,7 @@ export default function ContratsPage() {
                         <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{contrat.budget || '-'}</span>
                         {contrat.montant_marche && (
                         <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
-                        {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(contrat.montant_marche)}
+                        {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(contrat.montant_marche)}
                       </p>
                       )}
                       </div>

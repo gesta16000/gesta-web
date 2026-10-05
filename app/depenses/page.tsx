@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import Sidebar from '../../components/Sidebar';
 import { Wallet, Plus, Filter, Edit3, Trash2, MessageCircle, X, Save } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function DepensesPage() {
   const router = useRouter();
@@ -15,6 +15,7 @@ export default function DepensesPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  
   const [newDepense, setNewDepense] = useState({
     type_depense: 'marche',
     contrat_id: '',
@@ -27,8 +28,9 @@ export default function DepensesPage() {
     montant_ttc: '',
     commentaire: ''
   });
+  
   const [contrats, setContrats] = useState<any[]>([]);
-
+  
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -60,18 +62,34 @@ export default function DepensesPage() {
     setContrats(data || []);
   };
 
-  const formatEuro = (montant: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(montant);
+  const formatEuro = (montant: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(montant);
 
   const handleSave = async () => {
-    if (!newDepense.nature || !newDepense.designation || !newDepense.montant_ttc) return alert("Nature, Désignation et Montant sont obligatoires");
+    if (!newDepense.nature || !newDepense.designation || !newDepense.montant_ttc) {
+      return alert("Nature, Désignation et Montant sont obligatoires");
+    }
     
-    const montant = parseFloat(newDepense.montant_ttc.toString().replace(',', '.'));
+    if (newDepense.type_depense === 'marche' && !newDepense.contrat_id) {
+      return alert("Veuillez sélectionner un marché dans la liste.");
+    }
+    if (newDepense.type_depense === 'libre' && !newDepense.societe_libre) {
+      return alert("Veuillez saisir le nom de la société.");
+    }
+    
+    // CONVERSION SÉCURISÉE : Accepte "1500", "1500.50" ou "1500,50" ou "1 500,50"
+    const montantPropre = newDepense.montant_ttc.toString().replace(/\s/g, '').replace(',', '.');
+    const montant = parseFloat(montantPropre);
+    
+    if (isNaN(montant)) {
+      return alert("Le montant doit être un nombre valide (ex: 1500 ou 1500,50)");
+    }
+    
     const dataToSave = {
       type_depense: newDepense.type_depense,
-      contrat_id: newDepense.type_depense === 'marche' ? newDepense.contrat_id : null,
-      societe_libre: newDepense.type_depense === 'libre' ? newDepense.societe_libre : null,
-      categorie_budget: newDepense.type_depense === 'libre' ? newDepense.categorie_budget : null,
-      sous_categorie: newDepense.type_depense === 'libre' ? newDepense.sous_categorie : null,
+      contrat_id: (newDepense.type_depense === 'marche' && newDepense.contrat_id) ? newDepense.contrat_id : null,
+      societe_libre: (newDepense.type_depense === 'libre' && newDepense.societe_libre) ? newDepense.societe_libre : null,
+      categorie_budget: newDepense.categorie_budget, 
+      sous_categorie: newDepense.sous_categorie,
       annee_imputation: newDepense.annee_imputation,
       nature: newDepense.nature,
       designation: newDepense.designation,
@@ -141,7 +159,11 @@ export default function DepensesPage() {
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">Suivi de toutes les dépenses (marchés et hors marchés)</p>
           </div>
-          <button onClick={() => { setEditingId(null); setNewDepense({ type_depense: 'marche', contrat_id: '', societe_libre: '', categorie_budget: 'Principale', sous_categorie: 'Fonctionnement', annee_imputation: anneeFilter, nature: '', designation: '', montant_ttc: '', commentaire: '' }); setIsModalOpen(true); }} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all">
+          <button onClick={() => { 
+            setEditingId(null); 
+            setNewDepense({ type_depense: 'marche', contrat_id: '', societe_libre: '', categorie_budget: 'Principale', sous_categorie: 'Fonctionnement', annee_imputation: anneeFilter, nature: '', designation: '', montant_ttc: '', commentaire: '' }); 
+            setIsModalOpen(true); 
+          }} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all">
             <Plus className="h-4 w-4" /> Ajouter une dépense
           </button>
         </header>
@@ -189,6 +211,8 @@ export default function DepensesPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Date</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Budget</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Section</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Nature</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Désignation</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Montant TTC</th>
@@ -198,33 +222,52 @@ export default function DepensesPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {depenses.map((dep) => (
-                    <tr key={dep.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{new Date(dep.date_depense).toLocaleDateString('fr-FR')}</td>
+                    <tr key={dep.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors relative">
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">{new Date(dep.date_depense).toLocaleDateString('fr-FR')}</td>
+                      
                       <td className="px-4 py-3">
-                        {dep.type_depense === 'marche' ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300">
-                              📄 Marché
-                            </span>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{dep.contrats?.prestataires?.societe || 'N/A'}</p>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
-                              🆓 Libre
-                            </span>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{dep.societe_libre || 'N/A'}</p>
-                          </div>
-                        )}
+                        <div className="flex flex-col gap-1.5">
+                          <span className={`inline-flex w-fit items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+                            dep.type_depense === 'marche' 
+                              ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' 
+                              : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                          }`}>
+                            {dep.type_depense === 'marche' ? '📄 Marché' : '🆓 Libre'}
+                          </span>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[120px]" title={dep.type_depense === 'marche' ? dep.contrats?.prestataires?.societe : dep.societe_libre}>
+                            {dep.type_depense === 'marche' ? (dep.contrats?.prestataires?.societe || 'N/A') : (dep.societe_libre || 'N/A')}
+                          </p>
+                        </div>
                       </td>
+
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-100 dark:border-blue-800">
+                          {dep.categorie_budget || '-'}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-bold border border-purple-100 dark:border-purple-800">
+                          {dep.sous_categorie || '-'}
+                        </span>
+                      </td>
+
                       <td className="px-4 py-3 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">{dep.nature}</td>
-                      <td className="px-4 py-3 text-sm text-slate-800 dark:text-slate-200">{dep.designation}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">{formatEuro(dep.montant_ttc)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-800 dark:text-slate-200 max-w-xs truncate" title={dep.designation}>{dep.designation}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white whitespace-nowrap">{formatEuro(dep.montant_ttc)}</td>
+                      
                       <td className="px-4 py-3 text-center">
-                        <button className={`p-1.5 rounded-lg transition-colors ${dep.commentaire ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'text-slate-300 dark:text-slate-600'}`}>
+                        <button 
+                          title={dep.commentaire || "Aucun commentaire"}
+                          className={`relative p-1.5 rounded-lg transition-colors cursor-help ${dep.commentaire ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'text-slate-300 dark:text-slate-600'}`}
+                        >
                           <MessageCircle className="w-4 h-4" />
+                          {dep.commentaire && (
+                            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-white dark:border-slate-950"></span>
+                          )}
                         </button>
                       </td>
+                      
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => openEditModal(dep)} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors">
@@ -253,6 +296,7 @@ export default function DepensesPage() {
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><X className="h-5 w-5" /></button>
             </div>
             <div className="p-6 space-y-4">
+              
               <div>
                 <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Type de dépense</label>
                 <div className="flex gap-4">
@@ -267,39 +311,40 @@ export default function DepensesPage() {
                 </div>
               </div>
 
-              {newDepense.type_depense === 'marche' ? (
+              {newDepense.type_depense === 'marche' && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Marché *</label>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Marché concerné *</label>
                   <select value={newDepense.contrat_id} onChange={(e) => setNewDepense({...newDepense, contrat_id: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                     <option value="">-- Choisir un marché --</option>
                     {contrats.map(c => <option key={c.id} value={c.id}>{c.nom_marche} - {c.prestataires?.societe}</option>)}
                   </select>
                 </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Société *</label>
-                    <input value={newDepense.societe_libre} onChange={(e) => setNewDepense({...newDepense, societe_libre: e.target.value})} placeholder="Nom de la société" className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Catégorie budget</label>
-                      <select value={newDepense.categorie_budget} onChange={(e) => setNewDepense({...newDepense, categorie_budget: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        <option value="Principale">Principale</option>
-                        <option value="Annexe">Annexe</option>
-                        <option value="Régie d'avance">Régie d'avance</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Sous-catégorie</label>
-                      <select value={newDepense.sous_categorie} onChange={(e) => setNewDepense({...newDepense, sous_categorie: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        <option value="Fonctionnement">Fonctionnement</option>
-                        <option value="Investissement">Investissement</option>
-                      </select>
-                    </div>
-                  </div>
-                </>
               )}
+
+              {newDepense.type_depense === 'libre' && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Société *</label>
+                  <input value={newDepense.societe_libre} onChange={(e) => setNewDepense({...newDepense, societe_libre: e.target.value})} placeholder="Nom de la société" className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Catégorie Budget *</label>
+                  <select value={newDepense.categorie_budget} onChange={(e) => setNewDepense({...newDepense, categorie_budget: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    <option value="Principale">Principale</option>
+                    <option value="Annexe">Annexe</option>
+                    <option value="Régie d'avance">Régie d'avance</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Sous-catégorie *</label>
+                  <select value={newDepense.sous_categorie} onChange={(e) => setNewDepense({...newDepense, sous_categorie: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    <option value="Fonctionnement">Fonctionnement</option>
+                    <option value="Investissement">Investissement</option>
+                  </select>
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -317,9 +362,17 @@ export default function DepensesPage() {
                 <input value={newDepense.designation} onChange={(e) => setNewDepense({...newDepense, designation: e.target.value})} placeholder="Description de la dépense" className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </div>
 
+              {/* MODIFICATION ICI : type="text" et inputMode="decimal" pour accepter les virgules */}
               <div>
                 <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Montant TTC (€) *</label>
-                <input type="number" step="0.01" value={newDepense.montant_ttc} onChange={(e) => setNewDepense({...newDepense, montant_ttc: e.target.value})} placeholder="0.00" className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+                <input 
+                  type="text" 
+                  inputMode="decimal" 
+                  value={newDepense.montant_ttc} 
+                  onChange={(e) => setNewDepense({...newDepense, montant_ttc: e.target.value})} 
+                  placeholder="ex: 1500,50" 
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20" 
+                />
               </div>
 
               <div>

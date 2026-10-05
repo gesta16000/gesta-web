@@ -457,7 +457,7 @@ export default function PrestataireDetailPage() {
                           <td className="px-6 py-4 text-base text-slate-600 dark:text-slate-300"><div className="flex items-center gap-2"><Clock className="w-4 h-4" /><span>{int.date_debut ? new Date(int.date_debut).toLocaleDateString('fr-FR') : '-'}</span>{int.date_fin && int.date_fin !== int.date_debut && <span className="text-slate-400">→ {new Date(int.date_fin).toLocaleDateString('fr-FR')}</span>}</div></td>
                           <td className="px-6 py-4 text-base text-indigo-600 dark:text-indigo-400 font-semibold">{int.contrats?.numero_marche || '-'}</td>
                           <td className="px-6 py-4 text-base text-slate-600 dark:text-slate-300 max-w-xs truncate" title={int.description}>{int.description || '-'}</td>
-                          <td className="px-6 py-4 text-base text-slate-900 dark:text-slate-100 text-right font-black">{int.montant ? `${int.montant.toLocaleString('fr-FR')} €` : '-'}</td>
+                          <td className="px-6 py-4 text-base text-slate-900 dark:text-slate-100 text-right font-black">{int.montant ? `${int.montant.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : '-'}</td>
                           <td className="px-6 py-4 text-center">
                             {int.rapport_path ? (
                               <div className="flex items-center justify-center gap-2 p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 mx-auto max-w-[200px]">
