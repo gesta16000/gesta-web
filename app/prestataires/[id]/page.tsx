@@ -236,21 +236,35 @@ export default function PrestataireDetailPage() {
   };
 
   const openEditIntervention = (int: any) => {
+    console.log("🔍 Tentative d'édition de l'intervention:", int);
     setEditingIntervention(int);
+    
+    const formatDate = (dateStr: string) => {
+      if (!dateStr) return '';
+      return new Date(dateStr).toISOString().split('T')[0];
+    };
+
     setInterventionForm({
-      contrat_id: int.contrat_id || '', numero_dossier: int.numero_dossier || '', intervenant: int.intervenant || '',
-      date_debut: int.date_debut || new Date().toISOString().split('T')[0], date_fin: int.date_fin || '',
-      description: int.description || '', montant: int.montant?.toString() || ''
+      contrat_id: int.contrat_id || '',
+      numero_dossier: int.numero_dossier || '',
+      intervenant: int.intervenant || '',
+      date_debut: formatDate(int.date_debut) || new Date().toISOString().split('T')[0],
+      date_fin: formatDate(int.date_fin) || '',
+      description: int.description || '',
+      montant: int.montant?.toString() || ''
     });
     setActiveModal('intervention');
   };
 
   const handleDeleteIntervention = async (id: string) => {
-    if(confirm('Supprimer cette intervention ?')) { 
+    console.log("🗑️ Tentative de suppression de l'intervention ID:", id);
+    if(confirm('Supprimer cette intervention ? Cette action est irréversible.')) { 
       const { error } = await supabase.from('interventions').delete().eq('id', id);
       if (error) {
+        console.error("❌ Erreur Supabase:", error);
         alert('Erreur lors de la suppression : ' + error.message);
       } else {
+        alert('✅ Intervention supprimée avec succès.');
         fetchData();
       }
     }
@@ -301,7 +315,6 @@ export default function PrestataireDetailPage() {
                 <Edit3 className="w-4 h-4" /> Modifier la fiche
               </button>
             </div>
-
           </div>
         </div>
 
@@ -416,60 +429,66 @@ export default function PrestataireDetailPage() {
                 <Plus className="w-5 h-5" /> Nouvelle intervention
               </button>
             </div>
+            
+            {/* CORRECTION ICI : Structure JSX propre pour le scroll horizontal */}
             <div className="bg-white dark:bg-slate-950 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
-              {interventions.length === 0 ? <div className="p-12 text-center text-slate-500 text-base">Aucune intervention.</div> : (
-                <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
-                  <thead className="bg-slate-50 dark:bg-slate-900">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">N° Dossier</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Intervenant</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Période</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Marché</th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Objet</th>
-                      <th className="px-6 py-4 text-right text-sm font-bold text-slate-500 uppercase">Montant</th>
-                      <th className="px-6 py-4 text-center text-sm font-bold text-slate-500 uppercase">Rapport</th>
-                      <th className="px-6 py-4 text-center text-sm font-bold text-slate-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {interventions.map((int) => (
-                      <tr key={int.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                        <td className="px-6 py-4"><span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-sm font-bold"><Hash className="w-4 h-4" />{int.numero_dossier || 'N/A'}</span></td>
-                        <td className="px-6 py-4"><div className="flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-sm font-bold">{int.intervenant?.charAt(0) || '?'}</div><span className="text-base font-semibold text-slate-900 dark:text-slate-100">{int.intervenant || '-'}</span></div></td>
-                        <td className="px-6 py-4 text-base text-slate-600 dark:text-slate-300"><div className="flex items-center gap-2"><Clock className="w-4 h-4" /><span>{int.date_debut ? new Date(int.date_debut).toLocaleDateString('fr-FR') : '-'}</span>{int.date_fin && int.date_fin !== int.date_debut && <span className="text-slate-400">→ {new Date(int.date_fin).toLocaleDateString('fr-FR')}</span>}</div></td>
-                        <td className="px-6 py-4 text-base text-indigo-600 dark:text-indigo-400 font-semibold">{int.contrats?.numero_marche || '-'}</td>
-                        <td className="px-6 py-4 text-base text-slate-600 dark:text-slate-300 max-w-xs truncate" title={int.description}>{int.description || '-'}</td>
-                        <td className="px-6 py-4 text-base text-slate-900 dark:text-slate-100 text-right font-black">{int.montant ? `${int.montant.toLocaleString('fr-FR')} €` : '-'}</td>
-                        <td className="px-6 py-4 text-center">
-                          {int.rapport_path ? (
-                            <div className="flex items-center justify-center gap-2 p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 mx-auto max-w-[200px]">
-                              <div className="flex-1 min-w-0 text-left"><p className="text-sm font-bold text-indigo-700 dark:text-indigo-300">Rapport</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{int.rapport_path.split('_').pop()}</p></div>
-                              <button onClick={() => openPreview(int.rapport_path, 'Rapport intervention', 'rapport', 'intervention-reports')} className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex-shrink-0" title="Voir"><Eye className="w-4 h-4" /></button>
-                            </div>
-                          ) : <span className="text-sm text-slate-400 italic">Aucun</span>}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-center gap-2">
-                            <button 
-                              onClick={() => openEditIntervention(int)}
-                              className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" 
-                              title="Modifier"
-                            >
-                              <Edit3 className="w-5 h-5" />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteIntervention(int.id)}
-                              className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" 
-                              title="Supprimer"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
-                          </div>
-                        </td>
+              {interventions.length === 0 ? (
+                <div className="p-12 text-center text-slate-500 text-base">Aucune intervention.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-900">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">N° Dossier</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Intervenant</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Période</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Marché</th>
+                        <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Objet</th>
+                        <th className="px-6 py-4 text-right text-sm font-bold text-slate-500 uppercase">Montant</th>
+                        <th className="px-6 py-4 text-center text-sm font-bold text-slate-500 uppercase">Rapport</th>
+                        <th className="px-6 py-4 text-center text-sm font-bold text-slate-500 uppercase">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {interventions.map((int) => (
+                        <tr key={int.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                          <td className="px-6 py-4"><span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-sm font-bold"><Hash className="w-4 h-4" />{int.numero_dossier || 'N/A'}</span></td>
+                          <td className="px-6 py-4"><div className="flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-sm font-bold">{int.intervenant?.charAt(0) || '?'}</div><span className="text-base font-semibold text-slate-900 dark:text-slate-100">{int.intervenant || '-'}</span></div></td>
+                          <td className="px-6 py-4 text-base text-slate-600 dark:text-slate-300"><div className="flex items-center gap-2"><Clock className="w-4 h-4" /><span>{int.date_debut ? new Date(int.date_debut).toLocaleDateString('fr-FR') : '-'}</span>{int.date_fin && int.date_fin !== int.date_debut && <span className="text-slate-400">→ {new Date(int.date_fin).toLocaleDateString('fr-FR')}</span>}</div></td>
+                          <td className="px-6 py-4 text-base text-indigo-600 dark:text-indigo-400 font-semibold">{int.contrats?.numero_marche || '-'}</td>
+                          <td className="px-6 py-4 text-base text-slate-600 dark:text-slate-300 max-w-xs truncate" title={int.description}>{int.description || '-'}</td>
+                          <td className="px-6 py-4 text-base text-slate-900 dark:text-slate-100 text-right font-black">{int.montant ? `${int.montant.toLocaleString('fr-FR')} €` : '-'}</td>
+                          <td className="px-6 py-4 text-center">
+                            {int.rapport_path ? (
+                              <div className="flex items-center justify-center gap-2 p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 mx-auto max-w-[200px]">
+                                <div className="flex-1 min-w-0 text-left"><p className="text-sm font-bold text-indigo-700 dark:text-indigo-300">Rapport</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{int.rapport_path.split('_').pop()}</p></div>
+                                <button onClick={() => openPreview(int.rapport_path, 'Rapport intervention', 'rapport', 'intervention-reports')} className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex-shrink-0" title="Voir"><Eye className="w-4 h-4" /></button>
+                              </div>
+                            ) : <span className="text-sm text-slate-400 italic">Aucun</span>}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <button 
+                                onClick={() => openEditIntervention(int)}
+                                className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" 
+                                title="Modifier"
+                              >
+                                <Edit3 className="w-5 h-5" />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteIntervention(int.id)}
+                                className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" 
+                                title="Supprimer"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </section>
