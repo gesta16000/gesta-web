@@ -113,21 +113,24 @@ export default function AdminEmailConfigPage() {
     }
   };
 
+  // CORRECTION ICI : On utilise notre API qui fonctionne
   const handleTestEmail = async () => {
     setSending(true);
     setMessage(null);
 
     try {
-      const response = await fetch('/api/rapport-quotidien');
+      const response = await fetch('/api/admin/send-alerts', {
+        method: 'POST'
+      });
       const data = await response.json();
 
       if (data.success) {
-        setMessage({ type: 'success', text: '✅ Email de test envoyé avec succès !' });
+        setMessage({ type: 'success', text: '✅ ' + (data.message || 'Email de test envoyé avec succès !') });
       } else {
         setMessage({ type: 'error', text: '❌ Erreur : ' + (data.error || 'Erreur inconnue') });
       }
-    } catch (err) {
-      setMessage({ type: 'error', text: '❌ Erreur de connexion au serveur' });
+    } catch (err: any) {
+      setMessage({ type: 'error', text: '❌ Erreur de connexion : ' + err.message });
     }
 
     setSending(false);
