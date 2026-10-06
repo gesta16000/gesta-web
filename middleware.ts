@@ -1,19 +1,41 @@
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { NextResponse, type NextRequest } from 'next/server';
 
-export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
+export async function middleware(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({
+    request,
+  });
 
-  // 1. Récupérer l'utilisateur et son profil
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  // 1. Vérifier si l'utilisateur est connecté
   const { data: { user } } = await supabase.auth.getUser();
-  
-  // Si pas connecté, on redirige vers le login
+
   if (!user) {
-    return NextResponse.redirect(new URL('/login', req.url));
+    // Pas connecté ? Redirection vers le login
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  // 2. Vérifier le rôle de l'utilisateur
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -22,17 +44,17 @@ export async function middleware(req: NextRequest) {
 
   const userRole = profile?.role || 'lecture';
 
-  // 2. Bloquer l'accès à /admin si le rôle n'est pas 'admin'
-  if (req.nextUrl.pathname.startsWith('/admin')) {
+  // 3. Bloquer l'accès à /admin si le rôle n'est pas 'admin'
+  if (request.nextUrl.pathname.startsWith('/admin')) {
     if (userRole !== 'admin') {
-      return NextResponse.redirect(new URL('/dashboard', req.url));
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
   }
 
-  return res;
+  return supabaseResponse;
 }
 
-// Configurer les routes que le middleware doit surveiller
+// On applique ce middleware uniquement aux routes /admin
 export const config = {
-  matcher: ['/admin/:path*', '/dashboard/:path*'],
+  matcher: ['/admin/:path*'],
 };
