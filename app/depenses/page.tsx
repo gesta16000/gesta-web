@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import Sidebar from '../../components/Sidebar';
 import { Wallet, Plus, Filter, Edit3, Trash2, MessageCircle, X, Save } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 
 export default function DepensesPage() {
   const router = useRouter();
@@ -15,6 +14,9 @@ export default function DepensesPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  
+  // NOUVEAU : On stocke le rôle de l'utilisateur connecté
+  const [userRole, setUserRole] = useState<string>('lecture'); 
   
   const [newDepense, setNewDepense] = useState({
     type_depense: 'marche',
@@ -32,14 +34,20 @@ export default function DepensesPage() {
   const [contrats, setContrats] = useState<any[]>([]);
   
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.push('/login'); return; }
-      fetchData();
-      fetchContrats();
-    };
-    checkAuth();
-  }, [router, anneeFilter, typeFilter]);
+  const checkAuth = async () => {
+    // CORRECTION ICI : on récupère la session, pas l'user directement
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.push('/login'); return; }
+    
+    // On récupère le rôle de l'utilisateur connecté
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+    if (profile) setUserRole(profile.role || 'lecture');
+
+    fetchData();
+    fetchContrats();
+  };
+  checkAuth();
+}, [router, anneeFilter, typeFilter]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -76,7 +84,6 @@ export default function DepensesPage() {
       return alert("Veuillez saisir le nom de la société.");
     }
     
-    // CONVERSION SÉCURISÉE : Accepte "1500", "1500.50" ou "1500,50" ou "1 500,50"
     const montantPropre = newDepense.montant_ttc.toString().replace(/\s/g, '').replace(',', '.');
     const montant = parseFloat(montantPropre);
     
@@ -124,7 +131,7 @@ export default function DepensesPage() {
       contrat_id: dep.contrat_id || '',
       societe_libre: dep.societe_libre || '',
       categorie_budget: dep.categorie_budget || 'Principale',
-      sous_categorie: dep.sous_categorie || 'Fonctionnement',
+      sous_categorie: dep.categorie_budget === 'Régie d\'avance' ? 'N/A' : (dep.sous_categorie || 'Fonctionnement'),
       annee_imputation: dep.annee_imputation,
       nature: dep.nature,
       designation: dep.designation,
@@ -159,13 +166,17 @@ export default function DepensesPage() {
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">Suivi de toutes les dépenses (marchés et hors marchés)</p>
           </div>
-          <button onClick={() => { 
-            setEditingId(null); 
-            setNewDepense({ type_depense: 'marche', contrat_id: '', societe_libre: '', categorie_budget: 'Principale', sous_categorie: 'Fonctionnement', annee_imputation: anneeFilter, nature: '', designation: '', montant_ttc: '', commentaire: '' }); 
-            setIsModalOpen(true); 
-          }} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all">
-            <Plus className="h-4 w-4" /> Ajouter une dépense
-          </button>
+          
+          {/* NOUVEAU : On cache le bouton "Ajouter" si l'utilisateur est en lecture seule */}
+          {userRole !== 'lecture' && (
+            <button onClick={() => { 
+              setEditingId(null); 
+              setNewDepense({ type_depense: 'marche', contrat_id: '', societe_libre: '', categorie_budget: 'Principale', sous_categorie: 'Fonctionnement', annee_imputation: anneeFilter, nature: '', designation: '', montant_ttc: '', commentaire: '' }); 
+              setIsModalOpen(true); 
+            }} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all">
+              <Plus className="h-4 w-4" /> Ajouter une dépense
+            </button>
+          )}
         </header>
 
         <div className="p-8">
@@ -217,7 +228,10 @@ export default function DepensesPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Désignation</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Montant TTC</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">💬</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Actions</th>
+                    {/* NOUVEAU : On cache la colonne Actions si lecture seule */}
+                    {userRole !== 'lecture' && (
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -268,16 +282,19 @@ export default function DepensesPage() {
                         </button>
                       </td>
                       
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => openEditModal(dep)} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors">
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => handleDelete(dep.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+                      {/* NOUVEAU : On cache les boutons Modifier/Supprimer si lecture seule */}
+                      {userRole !== 'lecture' && (
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button onClick={() => openEditModal(dep)} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors">
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleDelete(dep.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -331,7 +348,18 @@ export default function DepensesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Catégorie Budget *</label>
-                  <select value={newDepense.categorie_budget} onChange={(e) => setNewDepense({...newDepense, categorie_budget: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                  <select 
+                    value={newDepense.categorie_budget} 
+                    onChange={(e) => {
+                      const newBudget = e.target.value;
+                      setNewDepense({
+                        ...newDepense, 
+                        categorie_budget: newBudget,
+                        sous_categorie: newBudget === 'Régie d\'avance' ? 'N/A' : 'Fonctionnement'
+                      });
+                    }} 
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
                     <option value="Principale">Principale</option>
                     <option value="Annexe">Annexe</option>
                     <option value="Régie d'avance">Régie d'avance</option>
@@ -339,10 +367,23 @@ export default function DepensesPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Sous-catégorie *</label>
-                  <select value={newDepense.sous_categorie} onChange={(e) => setNewDepense({...newDepense, sous_categorie: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                    <option value="Fonctionnement">Fonctionnement</option>
-                    <option value="Investissement">Investissement</option>
-                  </select>
+                  {newDepense.categorie_budget === 'Régie d\'avance' ? (
+                    <input 
+                      type="text" 
+                      value="N/A" 
+                      disabled 
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed font-medium"
+                    />
+                  ) : (
+                    <select 
+                      value={newDepense.sous_categorie} 
+                      onChange={(e) => setNewDepense({...newDepense, sous_categorie: e.target.value})} 
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    >
+                      <option value="Fonctionnement">Fonctionnement</option>
+                      <option value="Investissement">Investissement</option>
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -362,7 +403,6 @@ export default function DepensesPage() {
                 <input value={newDepense.designation} onChange={(e) => setNewDepense({...newDepense, designation: e.target.value})} placeholder="Description de la dépense" className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </div>
 
-              {/* MODIFICATION ICI : type="text" et inputMode="decimal" pour accepter les virgules */}
               <div>
                 <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Montant TTC (€) *</label>
                 <input 

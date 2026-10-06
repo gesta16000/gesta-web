@@ -21,6 +21,9 @@ export default function PrestataireDetailPage() {
   const [marches, setMarches] = useState<any[]>([]);
   const [interventions, setInterventions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // NOUVEAU : Rôle de l'utilisateur connecté
+  const [userRole, setUserRole] = useState<string>('lecture');
 
   const [activeModal, setActiveModal] = useState<'contact' | 'marche' | 'intervention' | 'prestataire' | null>(null);
   const [editingMarche, setEditingMarche] = useState<any>(null);
@@ -44,8 +47,6 @@ export default function PrestataireDetailPage() {
   const [interventionFile, setInterventionFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => { fetchData(); }, [prestataireId]);
-
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -65,6 +66,22 @@ export default function PrestataireDetailPage() {
     } catch (error) { console.error("Erreur fetch:", error); } 
     finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push('/login'); return; }
+      
+      // On récupère le rôle de l'utilisateur
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+      if (profile) setUserRole(profile.role || 'lecture');
+      
+      // Puis on charge les données
+      await fetchData();
+    };
+    checkAuth();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prestataireId, router]);
 
   const openPreview = async (path: string, name: string, type: string, bucket: string = 'marches-documents') => {
     setPreviewLoading(true);
@@ -236,20 +253,13 @@ export default function PrestataireDetailPage() {
   };
 
   const openEditIntervention = (int: any) => {
-    console.log("🔍 Tentative d'édition de l'intervention:", int);
     setEditingIntervention(int);
-    
-    const formatDate = (dateStr: string) => {
-      if (!dateStr) return '';
-      return new Date(dateStr).toISOString().split('T')[0];
-    };
-
     setInterventionForm({
       contrat_id: int.contrat_id || '',
       numero_dossier: int.numero_dossier || '',
       intervenant: int.intervenant || '',
-      date_debut: formatDate(int.date_debut) || new Date().toISOString().split('T')[0],
-      date_fin: formatDate(int.date_fin) || '',
+      date_debut: int.date_debut ? new Date(int.date_debut).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      date_fin: int.date_fin ? new Date(int.date_fin).toISOString().split('T')[0] : '',
       description: int.description || '',
       montant: int.montant?.toString() || ''
     });
@@ -257,14 +267,11 @@ export default function PrestataireDetailPage() {
   };
 
   const handleDeleteIntervention = async (id: string) => {
-    console.log("🗑️ Tentative de suppression de l'intervention ID:", id);
     if(confirm('Supprimer cette intervention ? Cette action est irréversible.')) { 
       const { error } = await supabase.from('interventions').delete().eq('id', id);
       if (error) {
-        console.error("❌ Erreur Supabase:", error);
         alert('Erreur lors de la suppression : ' + error.message);
       } else {
-        alert('✅ Intervention supprimée avec succès.');
         fetchData();
       }
     }
@@ -300,21 +307,24 @@ export default function PrestataireDetailPage() {
               </div>
             </div>
             
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={handleDeletePrestataire} 
-                disabled={uploading}
-                className="flex items-center gap-2 px-5 py-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 transition-all border border-rose-200 dark:border-rose-800 font-semibold text-base disabled:opacity-50"
-              >
-                <Trash2 className="w-4 h-4" /> Supprimer
-              </button>
-              <button 
-                onClick={openEditPrestataire} 
-                className="flex items-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-lg shadow-indigo-500/20 font-semibold text-base"
-              >
-                <Edit3 className="w-4 h-4" /> Modifier la fiche
-              </button>
-            </div>
+            {/* NOUVEAU : Masquer les boutons d'action du prestataire si lecture seule */}
+            {userRole !== 'lecture' && (
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={handleDeletePrestataire} 
+                  disabled={uploading}
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 transition-all border border-rose-200 dark:border-rose-800 font-semibold text-base disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" /> Supprimer
+                </button>
+                <button 
+                  onClick={openEditPrestataire} 
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-lg shadow-indigo-500/20 font-semibold text-base"
+                >
+                  <Edit3 className="w-4 h-4" /> Modifier la fiche
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -326,17 +336,23 @@ export default function PrestataireDetailPage() {
                 <span className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"><UserPlus className="w-5 h-5" /></span>
                 Contacts ({contacts.length})
               </h2>
-              <button onClick={() => { setActiveModal('contact'); setEditingContact(null); setNewContact({ nom: '', email: '', telephone: '', fonction: '' }); }} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-base font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95">
-                <Plus className="w-5 h-5" /> Nouveau contact
-              </button>
+              {/* NOUVEAU : Masquer le bouton d'ajout si lecture seule */}
+              {userRole !== 'lecture' && (
+                <button onClick={() => { setActiveModal('contact'); setEditingContact(null); setNewContact({ nom: '', email: '', telephone: '', fonction: '' }); }} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-base font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95">
+                  <Plus className="w-5 h-5" /> Nouveau contact
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {contacts.length === 0 ? <div className="col-span-full bg-white dark:bg-slate-950 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 p-12 text-center text-slate-500">Aucun contact.</div> : contacts.map((c) => (
                 <motion.div key={c.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, y: -5 }} transition={{ duration: 0.3 }} className="group relative bg-white dark:bg-slate-950 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-xl hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-300">
-                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <button onClick={() => openEditContact(c)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" title="Modifier"><Edit3 className="w-4 h-4" /></button>
-                    <button onClick={() => handleDeleteContact(c.id)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
-                  </div>
+                  {/* NOUVEAU : Masquer les boutons d'action du contact si lecture seule */}
+                  {userRole !== 'lecture' && (
+                    <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <button onClick={() => openEditContact(c)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" title="Modifier"><Edit3 className="w-4 h-4" /></button>
+                      <button onClick={() => handleDeleteContact(c.id)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  )}
                   <div className="flex items-center gap-4 mb-5">
                     <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-black text-xl shadow-lg group-hover:scale-110 transition-transform duration-300">
                       {c.nom?.charAt(0) || '?'}
@@ -362,9 +378,12 @@ export default function PrestataireDetailPage() {
                 <span className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"><Briefcase className="w-5 h-5" /></span>
                 Marchés & Contrats ({marches.length})
               </h2>
-              <button onClick={() => { setEditingMarche(null); setMarcheForm({ numero_tiers: '', numero_marche: '', objet: '', budget: 'Principale', section: 'Fonctionnement', imputation: '', type_contrat: 'Accord cadre avec un seul opérateur mono attributaire', montant_ht: '', montant_ttc: '', date_notification: '', date_debut: '', date_fin: '', nb_interventions_an: '' }); setMarcheFiles({ cctp: null, ccap: null, bpu: null, ae: null, documents_supp: null }); setActiveModal('marche'); }} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-base font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95">
-                <Plus className="w-5 h-5" /> Nouveau marché
-              </button>
+              {/* NOUVEAU : Masquer le bouton d'ajout si lecture seule */}
+              {userRole !== 'lecture' && (
+                <button onClick={() => { setEditingMarche(null); setMarcheForm({ numero_tiers: '', numero_marche: '', objet: '', budget: 'Principale', section: 'Fonctionnement', imputation: '', type_contrat: 'Accord cadre avec un seul opérateur mono attributaire', montant_ht: '', montant_ttc: '', date_notification: '', date_debut: '', date_fin: '', nb_interventions_an: '' }); setMarcheFiles({ cctp: null, ccap: null, bpu: null, ae: null, documents_supp: null }); setActiveModal('marche'); }} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-base font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95">
+                  <Plus className="w-5 h-5" /> Nouveau marché
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {marches.length === 0 ? <div className="col-span-full bg-white dark:bg-slate-950 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 p-12 text-center text-slate-500">Aucun marché.</div> : marches.map((m) => {
@@ -406,10 +425,13 @@ export default function PrestataireDetailPage() {
 
                       <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
                         <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{m.montant_ttc ? `${m.montant_ttc.toLocaleString('fr-FR')} €` : (m.montant_ht ? `${m.montant_ht.toLocaleString('fr-FR')} € HT` : '-')}</p>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => openEditMarche(m)} className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" title="Modifier"><Edit3 className="w-5 h-5" /></button>
-                          <button onClick={() => handleDeleteMarche(m.id)} className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Supprimer"><Trash2 className="w-5 h-5" /></button>
-                        </div>
+                        {/* NOUVEAU : Masquer les boutons d'action du marché si lecture seule */}
+                        {userRole !== 'lecture' && (
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => openEditMarche(m)} className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" title="Modifier"><Edit3 className="w-5 h-5" /></button>
+                            <button onClick={() => handleDeleteMarche(m.id)} className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Supprimer"><Trash2 className="w-5 h-5" /></button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </motion.div>
@@ -425,12 +447,14 @@ export default function PrestataireDetailPage() {
                 <span className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"><Calendar className="w-5 h-5" /></span>
                 Suivi des Interventions ({interventions.length})
               </h2>
-              <button onClick={() => { setEditingIntervention(null); setInterventionForm({ contrat_id: '', numero_dossier: '', intervenant: '', date_debut: new Date().toISOString().split('T')[0], date_fin: '', description: '', montant: '' }); setInterventionFile(null); setActiveModal('intervention'); }} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-base font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95">
-                <Plus className="w-5 h-5" /> Nouvelle intervention
-              </button>
+              {/* NOUVEAU : Masquer le bouton d'ajout si lecture seule */}
+              {userRole !== 'lecture' && (
+                <button onClick={() => { setEditingIntervention(null); setInterventionForm({ contrat_id: '', numero_dossier: '', intervenant: '', date_debut: new Date().toISOString().split('T')[0], date_fin: '', description: '', montant: '' }); setInterventionFile(null); setActiveModal('intervention'); }} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-base font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95">
+                  <Plus className="w-5 h-5" /> Nouvelle intervention
+                </button>
+              )}
             </div>
             
-            {/* CORRECTION ICI : Structure JSX propre pour le scroll horizontal */}
             <div className="bg-white dark:bg-slate-950 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
               {interventions.length === 0 ? (
                 <div className="p-12 text-center text-slate-500 text-base">Aucune intervention.</div>
@@ -446,7 +470,10 @@ export default function PrestataireDetailPage() {
                         <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Objet</th>
                         <th className="px-6 py-4 text-right text-sm font-bold text-slate-500 uppercase">Montant</th>
                         <th className="px-6 py-4 text-center text-sm font-bold text-slate-500 uppercase">Rapport</th>
-                        <th className="px-6 py-4 text-center text-sm font-bold text-slate-500 uppercase">Actions</th>
+                        {/* NOUVEAU : Masquer la colonne Actions si lecture seule */}
+                        {userRole !== 'lecture' && (
+                          <th className="px-6 py-4 text-center text-sm font-bold text-slate-500 uppercase">Actions</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -466,24 +493,27 @@ export default function PrestataireDetailPage() {
                               </div>
                             ) : <span className="text-sm text-slate-400 italic">Aucun</span>}
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center justify-center gap-2">
-                              <button 
-                                onClick={() => openEditIntervention(int)}
-                                className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" 
-                                title="Modifier"
-                              >
-                                <Edit3 className="w-5 h-5" />
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteIntervention(int.id)}
-                                className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" 
-                                title="Supprimer"
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </button>
-                            </div>
-                          </td>
+                          {/* NOUVEAU : Masquer les boutons d'action de l'intervention si lecture seule */}
+                          {userRole !== 'lecture' && (
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-center gap-2">
+                                <button 
+                                  onClick={() => openEditIntervention(int)}
+                                  className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" 
+                                  title="Modifier"
+                                >
+                                  <Edit3 className="w-5 h-5" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteIntervention(int.id)}
+                                  className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" 
+                                  title="Supprimer"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
