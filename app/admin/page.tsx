@@ -20,6 +20,7 @@ export default function AdminDashboardPage() {
   });
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [sendingAlert, setSendingAlert] = useState(false);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -29,24 +30,17 @@ export default function AdminDashboardPage() {
         return; 
       }
 
-      console.log("🔍 ID de l'utilisateur connecté :", user.id);
-
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .single();
 
-      console.log("📦 Résultat de la requête profil :", profile);
-      console.log("⚠️ Erreur de la requête (si il y en a une) :", error);
-
       if (profile?.role !== 'admin') {
-        console.log("🚫 Accès refusé car le rôle est :", profile?.role);
         router.push('/dashboard');
         return;
       }
 
-      console.log("✅ Accès Admin autorisé !");
       fetchAdminData();
     };
     checkAdmin();
@@ -73,6 +67,26 @@ export default function AdminDashboardPage() {
     setRecentLogs(logs || []);
     setRecentUsers(users || []);
     setLoading(false);
+  };
+
+  // NOUVEAU : Fonction pour tester l'envoi des alertes
+  const handleTestAlerts = async () => {
+    if (!confirm('Envoyer un email de test des alertes d\'échéance ?')) return;
+    setSendingAlert(true);
+    try {
+      const res = await fetch('/api/admin/send-alerts', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ ' + (data.message || 'Email envoyé avec succès !'));
+        fetchAdminData(); // Rafraîchir les stats
+      } else {
+        alert('❌ Erreur : ' + data.error);
+      }
+    } catch (error: any) {
+      alert('❌ Erreur réseau : ' + error.message);
+    } finally {
+      setSendingAlert(false);
+    }
   };
 
   if (loading) return (
@@ -134,8 +148,8 @@ export default function AdminDashboardPage() {
             </motion.div>
           </div>
 
-          {/* Actions rapides */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* Actions rapides - MODIFIÉ : 4 colonnes au lieu de 3 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Link href="/admin/utilisateurs">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.4 }} whileHover={{ y: -4 }} className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-2xl shadow-lg cursor-pointer">
                 <Users className="w-8 h-8 text-white mb-3" />
@@ -159,11 +173,29 @@ export default function AdminDashboardPage() {
                 <p className="text-sm text-amber-100">Historique des envois et statuts</p>
               </motion.div>
             </Link>
+
+            {/* NOUVEAU : Carte Tester les alertes */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ duration: 0.4, delay: 0.7 }} 
+              whileHover={{ y: -4 }} 
+              onClick={handleTestAlerts}
+              className="bg-gradient-to-br from-rose-500 to-pink-600 p-6 rounded-2xl shadow-lg cursor-pointer"
+            >
+              <Mail className="w-8 h-8 text-white mb-3" />
+              <h3 className="text-lg font-bold text-white mb-1">
+                {sendingAlert ? 'Envoi en cours...' : 'Tester les alertes'}
+              </h3>
+              <p className="text-sm text-rose-100">
+                {sendingAlert ? 'Patientez...' : 'Envoyer un récapitulatif des contrats à échéance'}
+              </p>
+            </motion.div>
           </div>
 
           {/* Dernières activités */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.7 }} className="bg-white dark:bg-slate-950 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.8 }} className="bg-white dark:bg-slate-950 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
                 <Mail className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Derniers envois d'emails
               </h2>
@@ -186,7 +218,7 @@ export default function AdminDashboardPage() {
               </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.8 }} className="bg-white dark:bg-slate-950 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.9 }} className="bg-white dark:bg-slate-950 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
                 <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Derniers utilisateurs inscrits
               </h2>
