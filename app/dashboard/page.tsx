@@ -18,7 +18,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   
-  // NOUVEAU : Sélecteur d'année
   const currentYear = new Date().getFullYear();
   const [anneeSelectionnee, setAnneeSelectionnee] = useState(currentYear);
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
@@ -43,30 +42,38 @@ export default function DashboardPage() {
       fetchData();
     };
     checkAuth();
-  }, [router, anneeSelectionnee]); // Se relance quand l'année change
+  }, [router, anneeSelectionnee]);
 
   const fetchData = async () => {
     setLoading(true);
 
-    // 1. Stats de base (indépendantes de l'année)
+    // 1. Stats de base
     const { count: countPrest } = await supabase.from('prestataires').select('*', { count: 'exact', head: true });
-    const { data: contrats } = await supabase.from('contrats').select('*');
     
-    if (contrats) {
+    // MODIFICATION 1 : On utilise select('*') pour être sûr de tout récupérer, même si la liaison prestataire est complexe
+    const { data: contrats, error: errContrats } = await supabase.from('contrats').select('*');
+    
+    if (errContrats) console.error("Erreur contrats:", errContrats);
+
+    if (contrats && contrats.length > 0) {
+      // MODIFICATION 2 : On affiche les données brutes dans la console du navigateur pour voir ce qui se passe
+      console.log("🔍 DONNÉES BRUTES DES CONTRATS:", contrats.map(c => ({ id: c.id, nom: c.nom_marche, date_fin: c.date_fin })));
+
       let urgents = 0, echus = 0;
       const today = new Date();
       let totaleMarches = 0, principale = 0, annexe = 0;
 
-      contrats.forEach(c => {
+      contrats.forEach((c: any) => {
         if (c.date_fin) {
           const diffDays = Math.ceil((new Date(c.date_fin).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
           if (diffDays < 0) echus++;
           else if (diffDays <= 60) urgents++;
         }
-        if (c.montant_marche) {
-          totaleMarches += Number(c.montant_marche);
-          if (c.budget === 'Principale') principale += Number(c.montant_marche);
-          else if (c.budget === 'Annexe') annexe += Number(c.montant_marche);
+        if (c.montant_marche || c.montant_ttc) {
+          const montant = Number(c.montant_marche || c.montant_ttc);
+          totaleMarches += montant;
+          if (c.budget === 'Principale') principale += montant;
+          else if (c.budget === 'Annexe') annexe += montant;
         }
       });
 
@@ -77,17 +84,24 @@ export default function DashboardPage() {
         { name: 'Annexe', value: annexe, color: PIE_COLORS[1] },
       ].filter(item => item.value > 0));
       
-      setUrgentContrats(contrats.filter(c => {
+      // MODIFICATION 3 : On inclut TOUT ce qui est <= 365 jours (y compris les contrats DÉJÀ échus, qui ont un nombre de jours négatif)
+      const contratsASurveiller = contrats.filter((c: any) => {
         if (!c.date_fin) return false;
-        return Math.ceil((new Date(c.date_fin).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) <= 60;
-      }).slice(0, 5));
+        const diffDays = Math.ceil((new Date(c.date_fin).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return diffDays <= 365; 
+      }).sort((a: any, b: any) => new Date(a.date_fin).getTime() - new Date(b.date_fin).getTime()).slice(0, 8);
+      
+      console.log("✅ CONTRATS FILTRÉS POUR LE DASHBOARD:", contratsASurveiller.length);
+      setUrgentContrats(contratsASurveiller);
+    } else {
+      setUrgentContrats([]);
     }
 
-    // 2. Budgets Votés de l'année sélectionnée
+    // 2. Budgets Votés
     const { data: bvData } = await supabase.from('budgets_votes').select('*').eq('annee', anneeSelectionnee);
     setBudgetsVotes(bvData || []);
 
-    // 3. DÉPENSES RÉELLES de l'année sélectionnée
+    // 3. DÉPENSES RÉELLES
     const { data: depData } = await supabase.from('depenses').select('montant_ttc, categorie_budget, sous_categorie').eq('annee_imputation', anneeSelectionnee);
     
     let pF = 0, pI = 0, aF = 0, aI = 0, regie = 0, totalDep = 0;
@@ -144,7 +158,6 @@ export default function DashboardPage() {
         <header className="flex h-16 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-8 shadow-sm sticky top-0 z-10">
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Tableau de Bord Financier</h1>
           <div className="flex items-center gap-4">
-            {/* SÉLECTEUR D'ANNÉE */}
             <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg">
               <Calendar className="w-4 h-4 text-slate-500" />
               <select 
@@ -174,7 +187,7 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
-            {/* 2. EXÉCUTION BUDGÉTAIRE (Grosses écritures) */}
+            {/* 2. EXÉCUTION BUDGÉTAIRE */}
             <motion.div 
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
               className="lg:col-span-2 bg-white dark:bg-slate-950 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800"
@@ -275,24 +288,45 @@ export default function DashboardPage() {
             className="bg-white dark:bg-slate-950 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800"
           >
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" /> Marchés à surveiller
+              <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Marchés à surveiller
             </h2>
             <div className="space-y-3">
               {urgentContrats.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4 bg-slate-50 dark:bg-slate-900 rounded-xl">Aucune urgence. Tous les marchés sont en règle. 🎉</p>
+                <div className="flex items-center justify-center gap-3 p-6 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  <p className="text-emerald-800 dark:text-emerald-300 font-bold text-base">
+                    Aucune urgence. Tous les marchés sont en règle. 🎉
+                  </p>
+                </div>
               ) : (
-                urgentContrats.map(c => {
+                urgentContrats.map((c: any) => {
                   const days = Math.ceil((new Date(c.date_fin).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                  
+                  let badgeClass = "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400";
+                  let badgeText = `🟡 Dans ${days}j`;
+                  
+                  if (days < 0) {
+                    badgeClass = "bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400";
+                    badgeText = `⛔ Échu depuis ${Math.abs(days)}j`;
+                  } else if (days <= 60) {
+                    badgeClass = "bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400";
+                    badgeText = `🔴 Dans ${days}j`;
+                  } else if (days <= 180) {
+                    badgeClass = "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400";
+                    badgeText = `🟠 Dans ${days}j`;
+                  }
+
                   return (
-                    <div key={c.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <div key={c.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 hover:shadow-md transition-shadow">
                       <div>
-                        <p className="font-semibold text-slate-900 dark:text-slate-100">{c.nom_marche || c.objet}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          Fin: {new Date(c.date_fin).toLocaleDateString('fr-FR')} • {formatEuro(c.montant_marche || 0)}
+                        <p className="font-bold text-slate-900 dark:text-slate-100">{c.prestataire || 'Prestataire non renseigné'}</p>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 truncate max-w-md">{c.nom_marche || c.objet || 'Marché sans nom'}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                          Fin: {new Date(c.date_fin).toLocaleDateString('fr-FR')} • {formatEuro(c.montant_marche || c.montant_ttc || 0)}
                         </p>
                       </div>
-                      <span className={`text-xs font-bold px-3 py-1.5 rounded-lg ${days < 0 ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'}`}>
-                        {days < 0 ? `Échu depuis ${Math.abs(days)}j` : `Échéance dans ${days}j`}
+                      <span className={`text-xs font-black px-3 py-2 rounded-lg whitespace-nowrap ${badgeClass}`}>
+                        {badgeText}
                       </span>
                     </div>
                   );
