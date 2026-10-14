@@ -7,19 +7,29 @@ import Sidebar from '../../components/Sidebar';
 import { Shield, Users, Mail, CheckCircle2, XCircle, Calendar } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import type { EmailLog, UserProfile } from '../../types/admin';
+import { getErrorMessage } from '../../lib/error';
+
+interface AdminStats {
+  totalUsers: number;
+  totalAdmins: number;
+  totalEmailsSent: number;
+  successEmails: number;
+  errorEmails: number;
+}
 
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<AdminStats>({
     totalUsers: 0,
     totalAdmins: 0,
     totalEmailsSent: 0,
     successEmails: 0,
     errorEmails: 0
   });
-  const [recentLogs, setRecentLogs] = useState<any[]>([]);
-  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [recentLogs, setRecentLogs] = useState<EmailLog[]>([]);
+  const [recentUsers, setRecentUsers] = useState<UserProfile[]>([]);
   const [sendingAlert, setSendingAlert] = useState(false);
 
   useEffect(() => {
@@ -47,15 +57,22 @@ export default function AdminDashboardPage() {
   }, [router]);
 
   const fetchAdminData = async () => {
-    const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-    const { count: totalAdmins } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
+    // 1. Stats utilisateurs - requêtes sur la table profiles
+const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+    // 2. Count admin users from profiles
+const { count: totalAdmins } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
     
-    const { count: totalEmailsSent } = await supabase.from('email_logs').select('*', { count: 'exact', head: true });
-    const { count: successEmails } = await supabase.from('email_logs').select('*', { count: 'exact', head: true }).eq('statut', 'success');
-    const { count: errorEmails } = await supabase.from('email_logs').select('*', { count: 'exact', head: true }).eq('statut', 'error');
+    // 3. Total emails sent from email_logs
+const { count: totalEmailsSent } = await supabase.from('email_logs').select('*', { count: 'exact', head: true });
+    // 4. Success emails from email_logs
+const { count: successEmails } = await supabase.from('email_logs').select('*', { count: 'exact', head: true }).eq('statut', 'success');
+    // 5. Error emails from email_logs
+const { count: errorEmails } = await supabase.from('email_logs').select('*', { count: 'exact', head: true }).eq('statut', 'error');
 
-    const { data: logs } = await supabase.from('email_logs').select('*').order('date_envoi', { ascending: false }).limit(5);
-    const { data: users } = await supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(5);
+    // 6. Recent email logs (limited to 5)
+const { data: logs } = await supabase.from('email_logs').select('*').order('date_envoi', { ascending: false }).limit(5);
+    // 7. Recent registered users (limited to 5)
+const { data: users } = await supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(5);
 
     setStats({
       totalUsers: totalUsers || 0,
@@ -82,8 +99,8 @@ export default function AdminDashboardPage() {
       } else {
         alert('❌ Erreur : ' + data.error);
       }
-    } catch (error: any) {
-      alert('❌ Erreur réseau : ' + error.message);
+    } catch (error: unknown) {
+      alert('❌ Erreur réseau : ' + getErrorMessage(error));
     } finally {
       setSendingAlert(false);
     }

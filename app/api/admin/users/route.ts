@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '../../../../lib/supabase-server-auth';
+import { getErrorMessage } from '../../../../lib/error';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,7 +9,10 @@ const supabaseAdmin = createClient(
 );
 
 // 1. CRÉER un utilisateur
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   try {
     // On récupère aussi nom_complet ici
     const { email, password, nom_complet, role } = await request.json();
@@ -38,13 +43,16 @@ export async function POST(request: Request) {
     if (profileError) return NextResponse.json({ error: 'DB: ' + profileError.message }, { status: 500 });
 
     return NextResponse.json({ success: true, userId });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
 // 2. MODIFIER un utilisateur (C'EST CELLE QUI MANQUAIT !)
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const { userId, email, nom_complet, password, role } = await request.json();
     if (!userId) return NextResponse.json({ error: 'ID manquant' }, { status: 400 });
@@ -64,13 +72,16 @@ export async function PUT(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
 // 3. SUPPRIMER un utilisateur
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const { userId } = await request.json();
     if (!userId) return NextResponse.json({ error: 'ID manquant' }, { status: 400 });
@@ -83,7 +94,7 @@ export async function DELETE(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

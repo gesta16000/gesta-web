@@ -1,8 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
+import { requireAdmin } from '../../../../lib/supabase-server-auth';
+import { getErrorMessage } from '../../../../lib/error';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -85,7 +90,7 @@ export async function POST() {
     `;
 
     // 5. Envoi de l'email
-    const targetEmail = 'gesta16000@gmail.com';
+    const targetEmail = process.env.ADMIN_EMAIL || 'gesta16000@gmail.com';
     
     const { error: emailError } = await resend.emails.send({
       from: 'onboarding@resend.dev',
@@ -104,11 +109,13 @@ export async function POST() {
         statut: 'success',
         date_envoi: new Date().toISOString()
       });
-    } catch (e) { console.log("Log non sauvegardé"); }
+    } catch (logError: unknown) {
+      console.log("Log non sauvegardé:", getErrorMessage(logError));
+    }
 
     return NextResponse.json({ success: true, message: `✅ Rapport envoyé ! ${alert365.length + alert180.length + alert60.length} contrat(s) surveillé(s).` });
 
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }
