@@ -21,3 +21,18 @@ export interface UserProfile {
   role: 'admin' | 'lecture' | string;
   created_at: string;
 }
+
+/** Ligne de la table Supabase `periodes_cloture` : état de clôture comptable
+ * d'une année complète (mois = null) ou d'un mois précis. */
+export interface PeriodeCloture {
+  id: string;
+  annee: number;
+  mois: number | null;
+  statut: 'ouvert' | 'cloture';
+  cloture_par?: string | null;
+  cloture_a?: string | null;
+  deverrouille_par?: string | null;
+  deverrouille_a?: string | null;
+  raison_deverrouillage?: string | null;
+  created_at: string;
+}

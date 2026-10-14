@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import Sidebar from '../../components/Sidebar';
-import { Shield, Users, Mail, CheckCircle2, XCircle, Calendar } from 'lucide-react';
+import { Shield, Users, Mail, CheckCircle2, XCircle, Calendar, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import type { EmailLog, UserProfile } from '../../types/admin';
 import { getErrorMessage } from '../../lib/error';
+import PeriodesClotureSection from '../../components/PeriodesClotureSection';
 
 interface AdminStats {
   totalUsers: number;
@@ -16,6 +17,48 @@ interface AdminStats {
   totalEmailsSent: number;
   successEmails: number;
   errorEmails: number;
+}
+
+/**
+ * Échappe une valeur pour une cellule CSV (RFC 4180) : entoure de guillemets
+ * si la valeur contient une virgule, un guillemet ou un retour à la ligne,
+ * et double les guillemets internes.
+ */
+function escapeCsvField(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+/** Convertit une liste de logs d'emails en contenu CSV (séparateur virgule). */
+function emailLogsToCsv(logs: EmailLog[]): string {
+  const headers = ['ID', 'Destinataires', 'Sujet', 'Statut', "Date d'envoi"];
+  const rows = logs.map((log) => [
+    log.id,
+    (log.destinataires || []).join('; '),
+    log.sujet || '',
+    log.statut,
+    new Date(log.date_envoi).toLocaleString('fr-FR'),
+  ]);
+
+  return [headers, ...rows]
+    .map((row) => row.map((cell) => escapeCsvField(String(cell))).join(','))
+    .join('\r\n');
+}
+
+/** Déclenche le téléchargement d'un contenu CSV dans le navigateur. */
+function downloadCsv(filename: string, csvContent: string): void {
+  // Le BOM UTF-8 garantit un affichage correct des accents dans Excel.
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export default function AdminDashboardPage() {
@@ -31,6 +74,9 @@ export default function AdminDashboardPage() {
   const [recentLogs, setRecentLogs] = useState<EmailLog[]>([]);
   const [recentUsers, setRecentUsers] = useState<UserProfile[]>([]);
   const [sendingAlert, setSendingAlert] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [exportingRange, setExportingRange] = useState(false);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -103,6 +149,49 @@ const { data: users } = await supabase.from('profiles').select('*').order('creat
       alert('❌ Erreur réseau : ' + getErrorMessage(error));
     } finally {
       setSendingAlert(false);
+    }
+  };
+
+  // Export CSV des derniers logs d'emails affichés à l'écran
+  const handleExportLogsCsv = () => {
+    const csvContent = emailLogsToCsv(recentLogs);
+    const today = new Date().toISOString().split('T')[0];
+    downloadCsv(`gesta-logs-emails-${today}.csv`, csvContent);
+  };
+
+  // Export CSV des logs d'emails sur une plage de dates, via l'API serveur
+  const handleExportRangeCsv = async () => {
+    if (!startDate || !endDate) {
+      alert('⚠️ Veuillez sélectionner une date de début et une date de fin.');
+      return;
+    }
+    if (startDate > endDate) {
+      alert('⚠️ La date de début doit être antérieure ou égale à la date de fin.');
+      return;
+    }
+
+    setExportingRange(true);
+    try {
+      const res = await fetch(`/api/admin/export-logs?startDate=${startDate}&endDate=${endDate}`);
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        alert('❌ Erreur : ' + (json.error || "Échec de l'export"));
+        return;
+      }
+
+      const logs: EmailLog[] = json.data;
+      if (logs.length === 0) {
+        alert('ℹ️ Aucun email trouvé sur cette période.');
+        return;
+      }
+
+      const csvContent = emailLogsToCsv(logs);
+      downloadCsv(`gesta-logs-emails_${startDate}_au_${endDate}.csv`, csvContent);
+    } catch (error: unknown) {
+      alert('❌ Erreur réseau : ' + getErrorMessage(error));
+    } finally {
+      setExportingRange(false);
     }
   };
 
@@ -210,12 +299,55 @@ const { data: users } = await supabase.from('profiles').select('*').order('creat
             </motion.div>
           </div>
 
+          {/* Clotures comptables */}
+          <PeriodesClotureSection />
+
           {/* Dernières activités */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.8 }} className="bg-white dark:bg-slate-950 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
-                <Mail className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Derniers envois d'emails
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Derniers envois d'emails
+                </h2>
+                <button
+                  onClick={handleExportLogsCsv}
+                  disabled={recentLogs.length === 0}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Exporter les derniers logs d'emails au format CSV"
+                >
+                  <Download className="w-3.5 h-3.5" /> Exporter en CSV
+                </button>
+              </div>
+
+              {/* Export CSV par plage de dates */}
+              <div className="flex flex-wrap items-end gap-2 mb-4 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Du</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="text-sm px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Au</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="text-sm px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+                <button
+                  onClick={handleExportRangeCsv}
+                  disabled={exportingRange}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> {exportingRange ? 'Export en cours...' : 'Exporter par période'}
+                </button>
+              </div>
+
               <div className="space-y-3">
                 {recentLogs.length === 0 ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">Aucun email envoyé pour le moment.</p>

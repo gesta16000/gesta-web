@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '../../../lib/supabase';
 import Sidebar from '../../../components/Sidebar';
+import { getErrorMessage } from '../../../lib/error';
 import { 
   ArrowLeft, Plus, X, Loader2, Building2, Phone, Mail, MapPin, 
   UserPlus, Calendar, Paperclip, Download, Trash2, Edit3, CheckCircle2, Briefcase, 
-  FileText, Hash, Clock, FolderOpen, Eye, Printer, ExternalLink
+  FileText, Hash, Clock, FolderOpen, Eye, Printer, ExternalLink, RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -46,6 +47,11 @@ export default function PrestataireDetailPage() {
   const [interventionForm, setInterventionForm] = useState({ contrat_id: '', numero_dossier: '', intervenant: '', date_debut: new Date().toISOString().split('T')[0], date_fin: '', description: '', montant: '' });
   const [interventionFile, setInterventionFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  // Gestion du remplacement/suppression des documents d'un marché déjà uploadés.
+  // Clé = `${marcheId}:${fieldName}` pour cibler le spinner sur le bon document.
+  const [processingDoc, setProcessingDoc] = useState<string | null>(null);
+  const replaceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const fetchData = async () => {
     setLoading(true);
@@ -94,6 +100,61 @@ export default function PrestataireDetailPage() {
   const handleDownload = () => { if (previewDoc) { const link = document.createElement('a'); link.href = previewDoc.url; link.download = previewDoc.name; link.click(); } };
   const handlePrint = () => { if (previewDoc) { const printWindow = window.open(previewDoc.url, '_blank'); if (printWindow) { printWindow.onload = () => printWindow.print(); } } };
   const handleOpenNewTab = () => { if (previewDoc) { window.open(previewDoc.url, '_blank'); } };
+
+  const DOCUMENT_FIELD_LABELS: Record<string, string> = {
+    cctp: 'CCTP', ccap: 'CCAP', bpu: 'BPU', ae: 'AE', documents_supp: 'Documents supp.',
+  };
+
+  // Remplace un document déjà uploadé : supprime l'ancien fichier du storage,
+  // uploade le nouveau (même convention de nommage que handleSaveMarche), puis
+  // met à jour la colonne {fieldName}_path du contrat.
+  const handleReplaceDocument = async (marcheId: string, fieldName: string, oldPath: string | null, file: File) => {
+    const key = `${marcheId}:${fieldName}`;
+    setProcessingDoc(key);
+    try {
+      if (oldPath) {
+        const { error: removeError } = await supabase.storage.from('marches-documents').remove([oldPath]);
+        if (removeError) throw removeError;
+      }
+
+      const ext = file.name.split('.').pop();
+      const newPath = `marche_${marcheId}_${fieldName}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('marches-documents').upload(newPath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase.from('contrats').update({ [`${fieldName}_path`]: newPath }).eq('id', marcheId);
+      if (updateError) throw updateError;
+
+      await fetchData();
+    } catch (error: unknown) {
+      alert('Erreur lors du remplacement : ' + getErrorMessage(error));
+    } finally {
+      setProcessingDoc(null);
+    }
+  };
+
+  // Supprime définitivement un document : retire le fichier du storage et
+  // vide la colonne {fieldName}_path du contrat.
+  const handleDeleteDocument = async (marcheId: string, fieldName: string, path: string) => {
+    const label = DOCUMENT_FIELD_LABELS[fieldName] || fieldName;
+    if (!window.confirm(`Supprimer définitivement le document "${label}" ? Cette action est irréversible.`)) return;
+
+    const key = `${marcheId}:${fieldName}`;
+    setProcessingDoc(key);
+    try {
+      const { error: removeError } = await supabase.storage.from('marches-documents').remove([path]);
+      if (removeError) throw removeError;
+
+      const { error: updateError } = await supabase.from('contrats').update({ [`${fieldName}_path`]: null }).eq('id', marcheId);
+      if (updateError) throw updateError;
+
+      await fetchData();
+    } catch (error: unknown) {
+      alert('Erreur lors de la suppression : ' + getErrorMessage(error));
+    } finally {
+      setProcessingDoc(null);
+    }
+  };
 
   const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -414,11 +475,11 @@ export default function PrestataireDetailPage() {
                         <div className="mb-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                           <p className="text-xs uppercase font-bold text-slate-500 mb-3 flex items-center gap-1"><Paperclip className="w-4 h-4" /> Documents associés</p>
                           <div className="space-y-2">
-                            {m.cctp_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20"><FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-blue-700 dark:text-blue-300">CCTP</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.cctp_path.split('_').pop()}</p></div><button onClick={() => openPreview(m.cctp_path, 'CCTP', 'cctp')} className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors" title="Voir"><Eye className="w-4 h-4" /></button></div>)}
-                            {m.ccap_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20"><FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">CCAP</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.ccap_path.split('_').pop()}</p></div><button onClick={() => openPreview(m.ccap_path, 'CCAP', 'ccap')} className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors" title="Voir"><Eye className="w-4 h-4" /></button></div>)}
-                            {m.bpu_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20"><FileText className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-amber-700 dark:text-amber-300">BPU</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.bpu_path.split('_').pop()}</p></div><button onClick={() => openPreview(m.bpu_path, 'BPU', 'bpu')} className="p-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors" title="Voir"><Eye className="w-4 h-4" /></button></div>)}
-                            {m.ae_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20"><FileText className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-purple-700 dark:text-purple-300">AE</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.ae_path.split('_').pop()}</p></div><button onClick={() => openPreview(m.ae_path, 'AE', 'ae')} className="p-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors" title="Voir"><Eye className="w-4 h-4" /></button></div>)}
-                            {m.documents_supp_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800"><FolderOpen className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-slate-700 dark:text-slate-300">Documents supp.</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.documents_supp_path.split('_').pop()}</p></div><button onClick={() => openPreview(m.documents_supp_path, 'Documents supp', 'docs')} className="p-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white transition-colors" title="Voir"><Eye className="w-4 h-4" /></button></div>)}
+                            {m.cctp_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20"><FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-blue-700 dark:text-blue-300">CCTP</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.cctp_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:cctp`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'cctp', m.cctp_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.cctp_path, 'CCTP', 'cctp')} disabled={processingDoc === `${m.id}:cctp`} className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:cctp`]?.click()} disabled={processingDoc === `${m.id}:cctp`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:cctp` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'cctp', m.cctp_path)} disabled={processingDoc === `${m.id}:cctp`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
+                            {m.ccap_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20"><FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">CCAP</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.ccap_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:ccap`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'ccap', m.ccap_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.ccap_path, 'CCAP', 'ccap')} disabled={processingDoc === `${m.id}:ccap`} className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:ccap`]?.click()} disabled={processingDoc === `${m.id}:ccap`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:ccap` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'ccap', m.ccap_path)} disabled={processingDoc === `${m.id}:ccap`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
+                            {m.bpu_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20"><FileText className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-amber-700 dark:text-amber-300">BPU</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.bpu_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:bpu`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'bpu', m.bpu_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.bpu_path, 'BPU', 'bpu')} disabled={processingDoc === `${m.id}:bpu`} className="p-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:bpu`]?.click()} disabled={processingDoc === `${m.id}:bpu`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:bpu` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'bpu', m.bpu_path)} disabled={processingDoc === `${m.id}:bpu`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
+                            {m.ae_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20"><FileText className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-purple-700 dark:text-purple-300">AE</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.ae_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:ae`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'ae', m.ae_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.ae_path, 'AE', 'ae')} disabled={processingDoc === `${m.id}:ae`} className="p-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:ae`]?.click()} disabled={processingDoc === `${m.id}:ae`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:ae` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'ae', m.ae_path)} disabled={processingDoc === `${m.id}:ae`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
+                            {m.documents_supp_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800"><FolderOpen className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-slate-700 dark:text-slate-300">Documents supp.</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.documents_supp_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:documents_supp`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'documents_supp', m.documents_supp_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.documents_supp_path, 'Documents supp', 'docs')} disabled={processingDoc === `${m.id}:documents_supp`} className="p-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:documents_supp`]?.click()} disabled={processingDoc === `${m.id}:documents_supp`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:documents_supp` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'documents_supp', m.documents_supp_path)} disabled={processingDoc === `${m.id}:documents_supp`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
                           </div>
                         </div>
                       )}
