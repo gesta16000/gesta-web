@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialisation de Resend et Supabase
 const resend = new Resend(process.env.RESEND_API_KEY);
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,8 +14,16 @@ export async function GET() {
     const in60Days = new Date();
     in60Days.setDate(today.getDate() + 60);
 
-    // Récupérer les contrats qui se terminent dans les 60 prochains jours
-    const { data: contrats, error } = await supabase
+    // 1. Récupérer d'abord les alertes DÉJÀ TRAITÉES pour les exclure
+    const { data: alertesTraitees } = await supabase
+      .from('alertes')
+      .select('contrat_id')
+      .eq('statut', 'traitee');
+
+    const idsTraites = alertesTraitees?.map(a => a.contrat_id) || [];
+
+    // 2. Récupérer les contrats à échéance, EN EXCLUANT ceux déjà traités
+    let query = supabase
       .from('contrats')
       .select(`
         *,
@@ -26,23 +33,28 @@ export async function GET() {
       .lte('date_fin', in60Days.toISOString().split('T')[0])
       .order('date_fin', { ascending: true });
 
+    // Si des alertes ont été traitées, on les filtre
+    if (idsTraites.length > 0) {
+      query = query.not('id', 'in', `(${idsTraites.join(',')})`);
+    }
+
+    const { data: contrats, error } = await query;
+
     if (error) {
-      // Log de l'erreur
       await supabase.from('email_logs').insert({
         destinataires: ['gesta16000@gmail.com'],
         statut: 'error',
         message: 'Erreur base de données : ' + error.message,
         type_envoi: 'automatique'
       });
-
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
+    // Si aucun contrat non traité n'est trouvé, on ne spamme pas, on arrête tout.
     if (!contrats || contrats.length === 0) {
-      return NextResponse.json({ message: 'Aucune échéance dans les 60 prochains jours.' });
+      return NextResponse.json({ message: 'Aucune échéance non traitée dans les 60 prochains jours.' });
     }
 
-    // Construire le contenu de l'email
     const todayStr = today.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
     let htmlContent = `
@@ -53,7 +65,7 @@ export async function GET() {
         </div>
         
         <div style="background: white; padding: 24px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-          <h2 style="color: #1e293b; font-size: 18px; margin-top: 0;">⚠️ ${contrats.length} contrat(s) arrivant à échéance</h2>
+          <h2 style="color: #1e293b; font-size: 18px; margin-top: 0;">⚠️ ${contrats.length} contrat(s) à échéance (NON TRAITÉS)</h2>
           
           <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
             <thead>
@@ -93,7 +105,7 @@ export async function GET() {
           
           <div style="margin-top: 24px; padding: 16px; background: #f1f5f9; border-radius: 8px; text-align: center;">
             <p style="margin: 0; color: #64748b; font-size: 13px;">
-              💡 Connectez-vous à <strong>GESTA</strong> pour consulter les détails et prendre les actions nécessaires.
+              💡 Connectez-vous à <strong>GESTA</strong> pour consulter les détails et <strong>marquer ces alertes comme traitées</strong>.
             </p>
           </div>
         </div>
@@ -104,21 +116,18 @@ export async function GET() {
       </div>
     `;
 
-        // Récupérer les destinataires configurés dans la base de données
     const { data: configData } = await supabase.from('email_config').select('destinataires').single();
     const destinataires = configData?.destinataires && configData.destinataires.length > 0 
       ? configData.destinataires 
-      : ['gesta16000@gmail.com']; // Fallback de sécurité
+      : ['gesta16000@gmail.com'];
 
-    // Envoyer l'email
     const { data: emailData, error: emailError } = await resend.emails.send({
       from: 'GESTA <onboarding@resend.dev>',
       to: destinataires,
-      subject: `🛡️ GESTA - ${contrats.length} contrat(s) à échéance dans les 60 jours`,
+      subject: `🛡️ GESTA - ${contrats.length} contrat(s) à échéance (Action requise)`,
       html: htmlContent,
     });
 
-    // Enregistrer le log dans la base de données
     if (emailError) {
       await supabase.from('email_logs').insert({
         destinataires: destinataires,
@@ -126,11 +135,9 @@ export async function GET() {
         message: 'Erreur Resend : ' + emailError.message,
         type_envoi: 'automatique'
       });
-
       return NextResponse.json({ success: false, error: emailError.message }, { status: 500 });
     }
 
-    // Succès : enregistrer le log
     await supabase.from('email_logs').insert({
       destinataires: destinataires,
       statut: 'success',
@@ -140,18 +147,16 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      results: [{ contrat: contrats.length + ' échéance(s)', status: 'success' }]
+      results: [{ contrat: contrats.length + ' échéance(s) non traitées', status: 'success' }]
     });
 
   } catch (err: any) {
-    // Log de l'erreur inattendue
     await supabase.from('email_logs').insert({
       destinataires: ['gesta16000@gmail.com'],
       statut: 'error',
       message: 'Erreur inattendue : ' + err.message,
       type_envoi: 'automatique'
     });
-
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
