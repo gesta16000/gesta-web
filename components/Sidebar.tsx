@@ -1,18 +1,40 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabase';
 import { useTheme } from 'next-themes';
 import { 
   LayoutDashboard, Building2, FileText, LogOut, ShieldCheck, Bell, 
-  Sun, Moon, Euro, Wallet, Shield 
+  Sun, Moon, Euro, Wallet, Shield, Archive 
 } from 'lucide-react';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  
+  // État pour stocker le rôle de l'utilisateur
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Récupérer le rôle au chargement de la sidebar
+  useEffect(() => {
+    const getUserRole = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        if (data) {
+          setUserRole(data.role);
+        }
+      }
+    };
+    getUserRole();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -23,12 +45,19 @@ export default function Sidebar() {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
+  // Liste des liens. On ajoute une propriété 'allowedRoles' pour les liens restreints.
   const links = [
     { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
     { href: '/prestataires', label: 'Prestataires', icon: Building2 },
     { href: '/contrats', label: 'Contrats', icon: FileText },
     { href: '/budgets', label: 'Budgets', icon: Euro },
     { href: '/depenses', label: 'Dépenses', icon: Wallet },
+    { 
+      href: '/clotures', 
+      label: 'Clôtures & Exports', 
+      icon: Archive, 
+      allowedRoles: ['admin', 'ecriture'] // ← Restreint aux admins et rédacteurs
+    },
     { href: '/alertes', label: 'Alertes & Actions', icon: Bell },
   ];
 
@@ -37,7 +66,6 @@ export default function Sidebar() {
       {/* Logo + Toggle thème */}
       <div className="flex h-16 items-center justify-between px-6 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          {/* LOGO A ROND */}
           <img 
             src="/logo-a.png" 
             alt="Logo Angoulême" 
@@ -57,6 +85,11 @@ export default function Sidebar() {
       {/* Navigation principale */}
       <nav className="flex-1 space-y-1 px-3 py-4">
         {links.map((link) => {
+          // Si le lien a des rôles autorisés et que l'utilisateur n'en fait pas partie, on ne l'affiche pas
+          if (link.allowedRoles && !link.allowedRoles.includes(userRole || '')) {
+            return null;
+          }
+
           const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
           return (
             <Link

@@ -9,7 +9,6 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import type { EmailLog, UserProfile } from '../../types/admin';
 import { getErrorMessage } from '../../lib/error';
-import PeriodesClotureSection from '../../components/PeriodesClotureSection';
 
 interface AdminStats {
   totalUsers: number;
@@ -49,7 +48,6 @@ function emailLogsToCsv(logs: EmailLog[]): string {
 
 /** Déclenche le téléchargement d'un contenu CSV dans le navigateur. */
 function downloadCsv(filename: string, csvContent: string): void {
-  // Le BOM UTF-8 garantit un affichage correct des accents dans Excel.
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -103,22 +101,14 @@ export default function AdminDashboardPage() {
   }, [router]);
 
   const fetchAdminData = async () => {
-    // 1. Stats utilisateurs - requêtes sur la table profiles
-const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-    // 2. Count admin users from profiles
-const { count: totalAdmins } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
-    
-    // 3. Total emails sent from email_logs
-const { count: totalEmailsSent } = await supabase.from('email_logs').select('*', { count: 'exact', head: true });
-    // 4. Success emails from email_logs
-const { count: successEmails } = await supabase.from('email_logs').select('*', { count: 'exact', head: true }).eq('statut', 'success');
-    // 5. Error emails from email_logs
-const { count: errorEmails } = await supabase.from('email_logs').select('*', { count: 'exact', head: true }).eq('statut', 'error');
+    const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+    const { count: totalAdmins } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
+    const { count: totalEmailsSent } = await supabase.from('email_logs').select('*', { count: 'exact', head: true });
+    const { count: successEmails } = await supabase.from('email_logs').select('*', { count: 'exact', head: true }).eq('statut', 'success');
+    const { count: errorEmails } = await supabase.from('email_logs').select('*', { count: 'exact', head: true }).eq('statut', 'error');
 
-    // 6. Recent email logs (limited to 5)
-const { data: logs } = await supabase.from('email_logs').select('*').order('date_envoi', { ascending: false }).limit(5);
-    // 7. Recent registered users (limited to 5)
-const { data: users } = await supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(5);
+    const { data: logs } = await supabase.from('email_logs').select('*').order('date_envoi', { ascending: false }).limit(5);
+    const { data: users } = await supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(5);
 
     setStats({
       totalUsers: totalUsers || 0,
@@ -132,7 +122,6 @@ const { data: users } = await supabase.from('profiles').select('*').order('creat
     setLoading(false);
   };
 
-  // NOUVEAU : Fonction pour tester l'envoi des alertes
   const handleTestAlerts = async () => {
     if (!confirm('Envoyer un email de test des alertes d\'échéance ?')) return;
     setSendingAlert(true);
@@ -141,7 +130,7 @@ const { data: users } = await supabase.from('profiles').select('*').order('creat
       const data = await res.json();
       if (data.success) {
         alert('✅ ' + (data.message || 'Email envoyé avec succès !'));
-        fetchAdminData(); // Rafraîchir les stats
+        fetchAdminData();
       } else {
         alert('❌ Erreur : ' + data.error);
       }
@@ -152,14 +141,12 @@ const { data: users } = await supabase.from('profiles').select('*').order('creat
     }
   };
 
-  // Export CSV des derniers logs d'emails affichés à l'écran
   const handleExportLogsCsv = () => {
     const csvContent = emailLogsToCsv(recentLogs);
     const today = new Date().toISOString().split('T')[0];
     downloadCsv(`gesta-logs-emails-${today}.csv`, csvContent);
   };
 
-  // Export CSV des logs d'emails sur une plage de dates, via l'API serveur
   const handleExportRangeCsv = async () => {
     if (!startDate || !endDate) {
       alert('⚠️ Veuillez sélectionner une date de début et une date de fin.');
@@ -254,7 +241,7 @@ const { data: users } = await supabase.from('profiles').select('*').order('creat
             </motion.div>
           </div>
 
-          {/* Actions rapides - MODIFIÉ : 4 colonnes au lieu de 3 */}
+          {/* Actions rapides */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Link href="/admin/utilisateurs">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.4 }} whileHover={{ y: -4 }} className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-2xl shadow-lg cursor-pointer">
@@ -280,7 +267,6 @@ const { data: users } = await supabase.from('profiles').select('*').order('creat
               </motion.div>
             </Link>
 
-            {/* NOUVEAU : Carte Tester les alertes */}
             <motion.div 
               initial={{ opacity: 0, y: 20 }} 
               animate={{ opacity: 1, y: 0 }} 
@@ -299,9 +285,6 @@ const { data: users } = await supabase.from('profiles').select('*').order('creat
             </motion.div>
           </div>
 
-          {/* Clotures comptables */}
-          <PeriodesClotureSection />
-
           {/* Dernières activités */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.8 }} className="bg-white dark:bg-slate-950 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
@@ -319,7 +302,6 @@ const { data: users } = await supabase.from('profiles').select('*').order('creat
                 </button>
               </div>
 
-              {/* Export CSV par plage de dates */}
               <div className="flex flex-wrap items-end gap-2 mb-4 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800">
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Du</label>

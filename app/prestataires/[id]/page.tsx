@@ -23,7 +23,7 @@ export default function PrestataireDetailPage() {
   const [interventions, setInterventions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // NOUVEAU : Rôle de l'utilisateur connecté
+  // Rôle de l'utilisateur connecté
   const [userRole, setUserRole] = useState<string>('lecture');
 
   const [activeModal, setActiveModal] = useState<'contact' | 'marche' | 'intervention' | 'prestataire' | null>(null);
@@ -48,8 +48,6 @@ export default function PrestataireDetailPage() {
   const [interventionFile, setInterventionFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  // Gestion du remplacement/suppression des documents d'un marché déjà uploadés.
-  // Clé = `${marcheId}:${fieldName}` pour cibler le spinner sur le bon document.
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
   const replaceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -78,11 +76,9 @@ export default function PrestataireDetailPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/login'); return; }
       
-      // On récupère le rôle de l'utilisateur
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
       if (profile) setUserRole(profile.role || 'lecture');
       
-      // Puis on charge les données
       await fetchData();
     };
     checkAuth();
@@ -105,10 +101,13 @@ export default function PrestataireDetailPage() {
     cctp: 'CCTP', ccap: 'CCAP', bpu: 'BPU', ae: 'AE', documents_supp: 'Documents supp.',
   };
 
-  // Remplace un document déjà uploadé : supprime l'ancien fichier du storage,
-  // uploade le nouveau (même convention de nommage que handleSaveMarche), puis
-  // met à jour la colonne {fieldName}_path du contrat.
+  // CORRECTION 1 : Blocage fonctionnel du remplacement pour les profils "lecture"
   const handleReplaceDocument = async (marcheId: string, fieldName: string, oldPath: string | null, file: File) => {
+    if (userRole === 'lecture') {
+      alert("⛔ Vous n'avez pas les droits pour modifier les documents d'un marché.");
+      return;
+    }
+
     const key = `${marcheId}:${fieldName}`;
     setProcessingDoc(key);
     try {
@@ -133,9 +132,13 @@ export default function PrestataireDetailPage() {
     }
   };
 
-  // Supprime définitivement un document : retire le fichier du storage et
-  // vide la colonne {fieldName}_path du contrat.
+  // CORRECTION 2 : Blocage fonctionnel de la suppression pour les profils "lecture"
   const handleDeleteDocument = async (marcheId: string, fieldName: string, path: string) => {
+    if (userRole === 'lecture') {
+      alert("⛔ Vous n'avez pas les droits pour supprimer les documents d'un marché.");
+      return;
+    }
+
     const label = DOCUMENT_FIELD_LABELS[fieldName] || fieldName;
     if (!window.confirm(`Supprimer définitivement le document "${label}" ? Cette action est irréversible.`)) return;
 
@@ -368,7 +371,6 @@ export default function PrestataireDetailPage() {
               </div>
             </div>
             
-            {/* NOUVEAU : Masquer les boutons d'action du prestataire si lecture seule */}
             {userRole !== 'lecture' && (
               <div className="flex items-center gap-3">
                 <button 
@@ -397,7 +399,6 @@ export default function PrestataireDetailPage() {
                 <span className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"><UserPlus className="w-5 h-5" /></span>
                 Contacts ({contacts.length})
               </h2>
-              {/* NOUVEAU : Masquer le bouton d'ajout si lecture seule */}
               {userRole !== 'lecture' && (
                 <button onClick={() => { setActiveModal('contact'); setEditingContact(null); setNewContact({ nom: '', email: '', telephone: '', fonction: '' }); }} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-base font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95">
                   <Plus className="w-5 h-5" /> Nouveau contact
@@ -407,7 +408,6 @@ export default function PrestataireDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {contacts.length === 0 ? <div className="col-span-full bg-white dark:bg-slate-950 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 p-12 text-center text-slate-500">Aucun contact.</div> : contacts.map((c) => (
                 <motion.div key={c.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} whileHover={{ scale: 1.03, y: -5 }} transition={{ duration: 0.3 }} className="group relative bg-white dark:bg-slate-950 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-xl hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-300">
-                  {/* NOUVEAU : Masquer les boutons d'action du contact si lecture seule */}
                   {userRole !== 'lecture' && (
                     <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                       <button onClick={() => openEditContact(c)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" title="Modifier"><Edit3 className="w-4 h-4" /></button>
@@ -439,7 +439,6 @@ export default function PrestataireDetailPage() {
                 <span className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"><Briefcase className="w-5 h-5" /></span>
                 Marchés & Contrats ({marches.length})
               </h2>
-              {/* NOUVEAU : Masquer le bouton d'ajout si lecture seule */}
               {userRole !== 'lecture' && (
                 <button onClick={() => { setEditingMarche(null); setMarcheForm({ numero_tiers: '', numero_marche: '', objet: '', budget: 'Principale', section: 'Fonctionnement', imputation: '', type_contrat: 'Accord cadre avec un seul opérateur mono attributaire', montant_ht: '', montant_ttc: '', date_notification: '', date_debut: '', date_fin: '', nb_interventions_an: '' }); setMarcheFiles({ cctp: null, ccap: null, bpu: null, ae: null, documents_supp: null }); setActiveModal('marche'); }} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-base font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95">
                   <Plus className="w-5 h-5" /> Nouveau marché
@@ -475,18 +474,84 @@ export default function PrestataireDetailPage() {
                         <div className="mb-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                           <p className="text-xs uppercase font-bold text-slate-500 mb-3 flex items-center gap-1"><Paperclip className="w-4 h-4" /> Documents associés</p>
                           <div className="space-y-2">
-                            {m.cctp_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20"><FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-blue-700 dark:text-blue-300">CCTP</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.cctp_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:cctp`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'cctp', m.cctp_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.cctp_path, 'CCTP', 'cctp')} disabled={processingDoc === `${m.id}:cctp`} className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:cctp`]?.click()} disabled={processingDoc === `${m.id}:cctp`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:cctp` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'cctp', m.cctp_path)} disabled={processingDoc === `${m.id}:cctp`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
-                            {m.ccap_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20"><FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">CCAP</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.ccap_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:ccap`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'ccap', m.ccap_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.ccap_path, 'CCAP', 'ccap')} disabled={processingDoc === `${m.id}:ccap`} className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:ccap`]?.click()} disabled={processingDoc === `${m.id}:ccap`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:ccap` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'ccap', m.ccap_path)} disabled={processingDoc === `${m.id}:ccap`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
-                            {m.bpu_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20"><FileText className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-amber-700 dark:text-amber-300">BPU</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.bpu_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:bpu`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'bpu', m.bpu_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.bpu_path, 'BPU', 'bpu')} disabled={processingDoc === `${m.id}:bpu`} className="p-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:bpu`]?.click()} disabled={processingDoc === `${m.id}:bpu`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:bpu` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'bpu', m.bpu_path)} disabled={processingDoc === `${m.id}:bpu`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
-                            {m.ae_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20"><FileText className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-purple-700 dark:text-purple-300">AE</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.ae_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:ae`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'ae', m.ae_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.ae_path, 'AE', 'ae')} disabled={processingDoc === `${m.id}:ae`} className="p-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:ae`]?.click()} disabled={processingDoc === `${m.id}:ae`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:ae` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'ae', m.ae_path)} disabled={processingDoc === `${m.id}:ae`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
-                            {m.documents_supp_path && (<div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800"><FolderOpen className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0" /><div className="flex-1 min-w-0"><p className="text-sm font-bold text-slate-700 dark:text-slate-300">Documents supp.</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.documents_supp_path.split('_').pop()}</p></div><input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:documents_supp`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'documents_supp', m.documents_supp_path, file); e.target.value = ''; }} className="hidden" /><button onClick={() => openPreview(m.documents_supp_path, 'Documents supp', 'docs')} disabled={processingDoc === `${m.id}:documents_supp`} className="p-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button><button onClick={() => replaceInputRefs.current[`${m.id}:documents_supp`]?.click()} disabled={processingDoc === `${m.id}:documents_supp`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:documents_supp` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button><button onClick={() => handleDeleteDocument(m.id, 'documents_supp', m.documents_supp_path)} disabled={processingDoc === `${m.id}:documents_supp`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button></div>)}
+                            {m.cctp_path && (
+                              <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20">
+                                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                                <div className="flex-1 min-w-0"><p className="text-sm font-bold text-blue-700 dark:text-blue-300">CCTP</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.cctp_path.split('_').pop()}</p></div>
+                                <input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:cctp`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'cctp', m.cctp_path, file); e.target.value = ''; }} className="hidden" />
+                                <button onClick={() => openPreview(m.cctp_path, 'CCTP', 'cctp')} disabled={processingDoc === `${m.id}:cctp`} className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button>
+                                
+                                {/* CORRECTION 3 : Masquage des boutons d'action sur les PJ pour le rôle "lecture" */}
+                                {userRole !== 'lecture' && (
+                                  <>
+                                    <button onClick={() => replaceInputRefs.current[`${m.id}:cctp`]?.click()} disabled={processingDoc === `${m.id}:cctp`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:cctp` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button>
+                                    <button onClick={() => handleDeleteDocument(m.id, 'cctp', m.cctp_path)} disabled={processingDoc === `${m.id}:cctp`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {m.ccap_path && (
+                              <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20">
+                                <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                                <div className="flex-1 min-w-0"><p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">CCAP</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.ccap_path.split('_').pop()}</p></div>
+                                <input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:ccap`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'ccap', m.ccap_path, file); e.target.value = ''; }} className="hidden" />
+                                <button onClick={() => openPreview(m.ccap_path, 'CCAP', 'ccap')} disabled={processingDoc === `${m.id}:ccap`} className="p-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button>
+                                {userRole !== 'lecture' && (
+                                  <>
+                                    <button onClick={() => replaceInputRefs.current[`${m.id}:ccap`]?.click()} disabled={processingDoc === `${m.id}:ccap`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:ccap` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button>
+                                    <button onClick={() => handleDeleteDocument(m.id, 'ccap', m.ccap_path)} disabled={processingDoc === `${m.id}:ccap`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {m.bpu_path && (
+                              <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20">
+                                <FileText className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                                <div className="flex-1 min-w-0"><p className="text-sm font-bold text-amber-700 dark:text-amber-300">BPU</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.bpu_path.split('_').pop()}</p></div>
+                                <input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:bpu`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'bpu', m.bpu_path, file); e.target.value = ''; }} className="hidden" />
+                                <button onClick={() => openPreview(m.bpu_path, 'BPU', 'bpu')} disabled={processingDoc === `${m.id}:bpu`} className="p-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button>
+                                {userRole !== 'lecture' && (
+                                  <>
+                                    <button onClick={() => replaceInputRefs.current[`${m.id}:bpu`]?.click()} disabled={processingDoc === `${m.id}:bpu`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:bpu` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button>
+                                    <button onClick={() => handleDeleteDocument(m.id, 'bpu', m.bpu_path)} disabled={processingDoc === `${m.id}:bpu`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {m.ae_path && (
+                              <div className="flex items-center gap-3 p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20">
+                                <FileText className="w-5 h-5 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                                <div className="flex-1 min-w-0"><p className="text-sm font-bold text-purple-700 dark:text-purple-300">AE</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.ae_path.split('_').pop()}</p></div>
+                                <input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:ae`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'ae', m.ae_path, file); e.target.value = ''; }} className="hidden" />
+                                <button onClick={() => openPreview(m.ae_path, 'AE', 'ae')} disabled={processingDoc === `${m.id}:ae`} className="p-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button>
+                                {userRole !== 'lecture' && (
+                                  <>
+                                    <button onClick={() => replaceInputRefs.current[`${m.id}:ae`]?.click()} disabled={processingDoc === `${m.id}:ae`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:ae` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button>
+                                    <button onClick={() => handleDeleteDocument(m.id, 'ae', m.ae_path)} disabled={processingDoc === `${m.id}:ae`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {m.documents_supp_path && (
+                              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
+                                <FolderOpen className="w-5 h-5 text-slate-600 dark:text-slate-400 flex-shrink-0" />
+                                <div className="flex-1 min-w-0"><p className="text-sm font-bold text-slate-700 dark:text-slate-300">Documents supp.</p><p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.documents_supp_path.split('_').pop()}</p></div>
+                                <input type="file" ref={(el) => { replaceInputRefs.current[`${m.id}:documents_supp`] = el; }} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleReplaceDocument(m.id, 'documents_supp', m.documents_supp_path, file); e.target.value = ''; }} className="hidden" />
+                                <button onClick={() => openPreview(m.documents_supp_path, 'Documents supp', 'docs')} disabled={processingDoc === `${m.id}:documents_supp`} className="p-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white transition-colors disabled:opacity-50" title="Voir"><Eye className="w-4 h-4" /></button>
+                                {userRole !== 'lecture' && (
+                                  <>
+                                    <button onClick={() => replaceInputRefs.current[`${m.id}:documents_supp`]?.click()} disabled={processingDoc === `${m.id}:documents_supp`} className="p-2 rounded-lg bg-slate-500 hover:bg-slate-600 text-white transition-colors disabled:opacity-50" title="Remplacer">{processingDoc === `${m.id}:documents_supp` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}</button>
+                                    <button onClick={() => handleDeleteDocument(m.id, 'documents_supp', m.documents_supp_path)} disabled={processingDoc === `${m.id}:documents_supp`} className="p-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
 
                       <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
                         <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{m.montant_ttc ? `${m.montant_ttc.toLocaleString('fr-FR')} €` : (m.montant_ht ? `${m.montant_ht.toLocaleString('fr-FR')} € HT` : '-')}</p>
-                        {/* NOUVEAU : Masquer les boutons d'action du marché si lecture seule */}
                         {userRole !== 'lecture' && (
                           <div className="flex items-center gap-2">
                             <button onClick={() => openEditMarche(m)} className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" title="Modifier"><Edit3 className="w-5 h-5" /></button>
@@ -508,7 +573,6 @@ export default function PrestataireDetailPage() {
                 <span className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"><Calendar className="w-5 h-5" /></span>
                 Suivi des Interventions ({interventions.length})
               </h2>
-              {/* NOUVEAU : Masquer le bouton d'ajout si lecture seule */}
               {userRole !== 'lecture' && (
                 <button onClick={() => { setEditingIntervention(null); setInterventionForm({ contrat_id: '', numero_dossier: '', intervenant: '', date_debut: new Date().toISOString().split('T')[0], date_fin: '', description: '', montant: '' }); setInterventionFile(null); setActiveModal('intervention'); }} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl text-base font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95">
                   <Plus className="w-5 h-5" /> Nouvelle intervention
@@ -531,7 +595,6 @@ export default function PrestataireDetailPage() {
                         <th className="px-6 py-4 text-left text-sm font-bold text-slate-500 uppercase">Objet</th>
                         <th className="px-6 py-4 text-right text-sm font-bold text-slate-500 uppercase">Montant</th>
                         <th className="px-6 py-4 text-center text-sm font-bold text-slate-500 uppercase">Rapport</th>
-                        {/* NOUVEAU : Masquer la colonne Actions si lecture seule */}
                         {userRole !== 'lecture' && (
                           <th className="px-6 py-4 text-center text-sm font-bold text-slate-500 uppercase">Actions</th>
                         )}
@@ -554,24 +617,11 @@ export default function PrestataireDetailPage() {
                               </div>
                             ) : <span className="text-sm text-slate-400 italic">Aucun</span>}
                           </td>
-                          {/* NOUVEAU : Masquer les boutons d'action de l'intervention si lecture seule */}
                           {userRole !== 'lecture' && (
                             <td className="px-6 py-4">
                               <div className="flex items-center justify-center gap-2">
-                                <button 
-                                  onClick={() => openEditIntervention(int)}
-                                  className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" 
-                                  title="Modifier"
-                                >
-                                  <Edit3 className="w-5 h-5" />
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteIntervention(int.id)}
-                                  className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" 
-                                  title="Supprimer"
-                                >
-                                  <Trash2 className="w-5 h-5" />
-                                </button>
+                                <button onClick={() => openEditIntervention(int)} className="p-2.5 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors" title="Modifier"><Edit3 className="w-5 h-5" /></button>
+                                <button onClick={() => handleDeleteIntervention(int.id)} className="p-2.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Supprimer"><Trash2 className="w-5 h-5" /></button>
                               </div>
                             </td>
                           )}
