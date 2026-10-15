@@ -16,6 +16,7 @@ interface DepenseExport {
   categorie_budget: string;
   sous_categorie: string;
   nature: string;
+  type_depense: string;
   societe_libre: string;
   contrats?: {
     prestataires?: {
