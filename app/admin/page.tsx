@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import Sidebar from '../../components/Sidebar';
-import { Shield, Users, Mail, CheckCircle2, XCircle, Calendar, Download } from 'lucide-react';
+import { Shield, Users, Mail, CheckCircle2, XCircle, Calendar, Download, Archive } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import type { EmailLog, UserProfile } from '../../types/admin';
@@ -18,11 +18,6 @@ interface AdminStats {
   errorEmails: number;
 }
 
-/**
- * Échappe une valeur pour une cellule CSV (RFC 4180) : entoure de guillemets
- * si la valeur contient une virgule, un guillemet ou un retour à la ligne,
- * et double les guillemets internes.
- */
 function escapeCsvField(value: string): string {
   if (/[",\n]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
@@ -30,7 +25,6 @@ function escapeCsvField(value: string): string {
   return value;
 }
 
-/** Convertit une liste de logs d'emails en contenu CSV (séparateur virgule). */
 function emailLogsToCsv(logs: EmailLog[]): string {
   const headers = ['ID', 'Destinataires', 'Sujet', 'Statut', "Date d'envoi"];
   const rows = logs.map((log) => [
@@ -46,7 +40,6 @@ function emailLogsToCsv(logs: EmailLog[]): string {
     .join('\r\n');
 }
 
-/** Déclenche le téléchargement d'un contenu CSV dans le navigateur. */
 function downloadCsv(filename: string, csvContent: string): void {
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -75,6 +68,10 @@ export default function AdminDashboardPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [exportingRange, setExportingRange] = useState(false);
+  
+  // NOUVEAU : États pour l'archivage
+  const [archiving, setArchiving] = useState(false);
+  const [archiveResult, setArchiveResult] = useState<any>(null);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -182,6 +179,33 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // NOUVEAU : Fonction d'archivage
+  const handleArchive = async () => {
+    if (!confirm('⚠️ ATTENTION : Cette action va archiver toutes les données de plus de 2 ans.\n\nLes données seront déplacées vers les tables d\'archives et retirées des tables principales.\n\nContinuer ?')) return;
+    
+    if (!confirm('Dernière confirmation : Es-tu sûr de vouloir archiver les données de plus de 2 ans ?')) return;
+
+    setArchiving(true);
+    setArchiveResult(null);
+    
+    try {
+      const res = await fetch('/api/admin/archive-old-data', { method: 'POST' });
+      const data = await res.json();
+      
+      if (data.success) {
+        setArchiveResult(data);
+        alert(`✅ Archivage terminé !\n\n• ${data.stats.depenses} dépenses archivées\n• ${data.stats.clotures} clôtures archivées\n• ${data.stats.email_logs} logs archivés\n\nTotal : ${data.stats.total} éléments déplacés vers les archives.`);
+        fetchAdminData();
+      } else {
+        alert('❌ Erreur : ' + data.error);
+      }
+    } catch (error: unknown) {
+      alert('❌ Erreur réseau : ' + getErrorMessage(error));
+    } finally {
+      setArchiving(false);
+    }
+  };
+
   if (loading) return (
     <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
       <div className="text-indigo-600 dark:text-indigo-400 font-medium animate-pulse flex flex-col items-center gap-2">
@@ -241,10 +265,10 @@ export default function AdminDashboardPage() {
             </motion.div>
           </div>
 
-          {/* Actions rapides */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Actions rapides - 5 colonnes maintenant */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
             <Link href="/admin/utilisateurs">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.4 }} whileHover={{ y: -4 }} className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-2xl shadow-lg cursor-pointer">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.4 }} whileHover={{ y: -4 }} className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-2xl shadow-lg cursor-pointer h-full">
                 <Users className="w-8 h-8 text-white mb-3" />
                 <h3 className="text-lg font-bold text-white mb-1">Gérer les utilisateurs</h3>
                 <p className="text-sm text-indigo-100">Attribuer les rôles et permissions</p>
@@ -252,7 +276,7 @@ export default function AdminDashboardPage() {
             </Link>
 
             <Link href="/admin/config-emails">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.5 }} whileHover={{ y: -4 }} className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 rounded-2xl shadow-lg cursor-pointer">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.5 }} whileHover={{ y: -4 }} className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 rounded-2xl shadow-lg cursor-pointer h-full">
                 <Mail className="w-8 h-8 text-white mb-3" />
                 <h3 className="text-lg font-bold text-white mb-1">Configurer les emails</h3>
                 <p className="text-sm text-emerald-100">Gérer les destinataires et tester</p>
@@ -260,7 +284,7 @@ export default function AdminDashboardPage() {
             </Link>
 
             <Link href="/admin/logs-emails">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.6 }} whileHover={{ y: -4 }} className="bg-gradient-to-br from-amber-500 to-orange-600 p-6 rounded-2xl shadow-lg cursor-pointer">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.6 }} whileHover={{ y: -4 }} className="bg-gradient-to-br from-amber-500 to-orange-600 p-6 rounded-2xl shadow-lg cursor-pointer h-full">
                 <Calendar className="w-8 h-8 text-white mb-3" />
                 <h3 className="text-lg font-bold text-white mb-1">Voir les logs emails</h3>
                 <p className="text-sm text-amber-100">Historique des envois et statuts</p>
@@ -273,7 +297,7 @@ export default function AdminDashboardPage() {
               transition={{ duration: 0.4, delay: 0.7 }} 
               whileHover={{ y: -4 }} 
               onClick={handleTestAlerts}
-              className="bg-gradient-to-br from-rose-500 to-pink-600 p-6 rounded-2xl shadow-lg cursor-pointer"
+              className="bg-gradient-to-br from-rose-500 to-pink-600 p-6 rounded-2xl shadow-lg cursor-pointer h-full"
             >
               <Mail className="w-8 h-8 text-white mb-3" />
               <h3 className="text-lg font-bold text-white mb-1">
@@ -282,6 +306,35 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-rose-100">
                 {sendingAlert ? 'Patientez...' : 'Envoyer un récapitulatif des contrats à échéance'}
               </p>
+            </motion.div>
+
+            {/* NOUVEAU : Bouton d'archivage */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ duration: 0.4, delay: 0.8 }} 
+              whileHover={{ y: -4 }} 
+              onClick={handleArchive}
+              disabled={archiving}
+              className={`bg-gradient-to-br from-red-500 to-orange-600 p-6 rounded-2xl shadow-lg cursor-pointer h-full relative overflow-hidden ${archiving ? 'opacity-80 cursor-wait' : ''}`}
+            >
+              {archiving && (
+                <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-10">
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+              <Archive className="w-8 h-8 text-white mb-3" />
+              <h3 className="text-lg font-bold text-white mb-1">
+                {archiving ? 'Archivage...' : 'Archiver les données'}
+              </h3>
+              <p className="text-sm text-red-100">
+                {archiving ? 'Patientez...' : 'Déplacer les données de +2 ans vers les archives'}
+              </p>
+              {archiveResult && (
+                <p className="text-xs text-white mt-2 font-semibold bg-white/20 rounded px-2 py-1 inline-block">
+                  ✓ {archiveResult.stats.total} éléments archivés
+                </p>
+              )}
             </motion.div>
           </div>
 
