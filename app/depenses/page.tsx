@@ -222,8 +222,15 @@ export default function DepensesPage() {
               </div>
             </div>
             <div className="mt-4 bg-white/20 rounded-full h-2 overflow-hidden">
-              <div className="bg-white h-full transition-all duration-500" style={{ width: `${totalBudgetVoté > 0 ? Math.min((totalEngage / totalBudgetVoté) * 100, 100) : 0}%` }} />
-            </div>
+  <div 
+    className={`h-full transition-all duration-500 ${
+      totalBudgetVoté > 0 && (totalEngage / totalBudgetVoté) > 1 
+        ? 'bg-red-500' 
+        : 'bg-white'
+    }`} 
+    style={{ width: `${totalBudgetVoté > 0 ? Math.min((totalEngage / totalBudgetVoté) * 100, 100) : 0}%` }} 
+  />
+</div>
           </div>
 
           {/* 2. KPIs PAR RÉGIE */}
@@ -325,7 +332,7 @@ export default function DepensesPage() {
                     <div className="flex flex-wrap gap-3">
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input type="text" placeholder="Rechercher..." value={searchBudget} onChange={(e) => setSearchBudget(e.target.value)} className="w-full md:w-64 pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                        <input type="text" placeholder="Rechercher..." value={searchBudget} onChange={(e) => setSearchBudget(e.target.value)} className="w-full md:w-64 pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
                       </div>
                       <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 dark:text-slate-100 text-sm">
                         <option value="all">Tous les types</option>
@@ -414,10 +421,9 @@ export default function DepensesPage() {
                     </div>
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input type="text" placeholder="Rechercher dans la régie d'avance..." value={searchRegie} onChange={(e) => setSearchRegie(e.target.value)} className="w-full md:w-64 pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" />
+                      <input type="text" placeholder="Rechercher dans la régie d'avance..." value={searchRegie} onChange={(e) => setSearchRegie(e.target.value)} className="w-full md:w-64 pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/20" />
                     </div>
                   </div>
-
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                       <thead className="bg-orange-50 dark:bg-slate-900 border-b border-orange-200 dark:border-slate-700">

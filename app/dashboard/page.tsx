@@ -161,12 +161,16 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg">
               <Calendar className="w-4 h-4 text-slate-500" />
               <select 
-                value={anneeSelectionnee} 
-                onChange={(e) => setAnneeSelectionnee(parseInt(e.target.value))}
-                className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
-              >
-                {years.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
+  value={anneeSelectionnee} 
+  onChange={(e) => setAnneeSelectionnee(parseInt(e.target.value))}
+  className="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+>
+  {years.map(y => (
+    <option key={y} value={y} className="bg-slate-900 text-white">
+      {y}
+    </option>
+  ))}
+</select>
             </div>
             <button className="relative rounded-full p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
               <Bell className="h-5 w-5" />

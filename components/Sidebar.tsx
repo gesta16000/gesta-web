@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 import { useTheme } from 'next-themes';
 import { 
   LayoutDashboard, Building2, FileText, LogOut, ShieldCheck, Bell, 
-  Sun, Moon, Euro, Wallet, Shield, Archive 
+  Sun, Moon, Euro, Wallet, Shield, Archive, Menu, X 
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -15,10 +15,9 @@ export default function Sidebar() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   
-  // État pour stocker le rôle de l'utilisateur
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Récupérer le rôle au chargement de la sidebar
   useEffect(() => {
     const getUserRole = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -45,7 +44,6 @@ export default function Sidebar() {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
-  // Liste des liens. On ajoute une propriété 'allowedRoles' pour les liens restreints.
   const links = [
     { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
     { href: '/prestataires', label: 'Prestataires', icon: Building2 },
@@ -56,13 +54,13 @@ export default function Sidebar() {
       href: '/clotures', 
       label: 'Clôtures & Exports', 
       icon: Archive, 
-      allowedRoles: ['admin', 'ecriture'] // ← Restreint aux admins et rédacteurs
+      allowedRoles: ['admin', 'ecriture']
     },
     { href: '/alertes', label: 'Alertes & Actions', icon: Bell },
   ];
 
-  return (
-    <div className="flex h-screen w-64 flex-col bg-slate-900 dark:bg-slate-950 text-white shadow-xl transition-colors">
+  const NavContent = () => (
+    <>
       {/* Logo + Toggle thème */}
       <div className="flex h-16 items-center justify-between px-6 border-b border-slate-800">
         <div className="flex items-center gap-3">
@@ -83,9 +81,8 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation principale */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
         {links.map((link) => {
-          // Si le lien a des rôles autorisés et que l'utilisateur n'en fait pas partie, on ne l'affiche pas
           if (link.allowedRoles && !link.allowedRoles.includes(userRole || '')) {
             return null;
           }
@@ -95,6 +92,7 @@ export default function Sidebar() {
             <Link
               key={link.href}
               href={link.href}
+              onClick={() => setIsMobileMenuOpen(false)} // Ferme le menu sur mobile après clic
               className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                 isActive
                   ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/20'
@@ -112,6 +110,7 @@ export default function Sidebar() {
       <div className="border-t border-slate-800 p-3 space-y-1">
         <Link
           href="/admin"
+          onClick={() => setIsMobileMenuOpen(false)}
           className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
             pathname === '/admin' || pathname.startsWith('/admin/')
               ? 'bg-purple-600 text-white shadow-md shadow-purple-900/20'
@@ -130,6 +129,50 @@ export default function Sidebar() {
           Déconnexion
         </button>
       </div>
-    </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* BOUTON MOBILE (visible uniquement sur mobile) */}
+      <button
+        onClick={() => setIsMobileMenuOpen(true)}
+        className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-slate-900 dark:bg-slate-950 text-white shadow-lg border border-slate-700"
+      >
+        <Menu className="h-6 w-6" />
+      </button>
+
+      {/* OVERLAY (fond sombre quand menu ouvert sur mobile) */}
+      {isMobileMenuOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* SIDEBAR MOBILE (drawer qui glisse) */}
+      <div
+        className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 dark:bg-slate-950 shadow-xl transform transition-transform duration-300 ease-in-out ${
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {/* Bouton fermer (X) */}
+        <button
+          onClick={() => setIsMobileMenuOpen(false)}
+          className="absolute top-4 right-4 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+        >
+          <X className="h-6 w-6" />
+        </button>
+        
+        <div className="pt-16"> {/* Espace pour le bouton X */}
+          <NavContent />
+        </div>
+      </div>
+
+      {/* SIDEBAR DESKTOP (fixe, visible toujours) */}
+      <div className="hidden md:flex h-screen w-64 flex-col bg-slate-900 dark:bg-slate-950 text-white shadow-xl transition-colors">
+        <NavContent />
+      </div>
+    </>
   );
 }
